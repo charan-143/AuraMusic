@@ -65,9 +65,9 @@ fun PixelAlbumCard(
         modifier = modifier
             .width(170.dp)
             .scale(scale)
-            .clip(RoundedCornerShape(24.dp))
+            .clip(RoundedCornerShape(28.dp))
             .background(MonochromeSurface)
-            .border(1.dp, MonochromeOutline, RoundedCornerShape(24.dp))
+            .border(1.dp, MonochromeOutline, RoundedCornerShape(28.dp))
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -81,9 +81,9 @@ fun PixelAlbumCard(
                 modifier = Modifier
                     .fillMaxWidth()
                     .height(146.dp)
-                    .clip(RoundedCornerShape(18.dp))
+                    .clip(RoundedCornerShape(20.dp))
                     .background(MonochromeSurfaceContainer)
-                    .border(0.5.dp, MonochromeOutlineVariant, RoundedCornerShape(18.dp))
+                    .border(0.5.dp, MonochromeOutlineVariant, RoundedCornerShape(20.dp))
             ) {
                 AsyncImage(
                     model = album.coverArtUrl,

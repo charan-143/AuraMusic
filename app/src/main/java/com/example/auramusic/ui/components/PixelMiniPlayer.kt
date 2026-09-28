@@ -94,16 +94,16 @@ fun PixelMiniPlayer(
             // Left: Squircle Album Art Thumbnail
             Box(
                 modifier = Modifier
-                    .size(46.dp)
-                    .clip(RoundedCornerShape(12.dp))
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(14.dp))
                     .background(MonochromeSurfaceHigh)
             ) {
                 PixelSquircleAlbumArt(
                     coverArtUrl = track.coverArtUrl,
                     isPlaying = isPlaying,
-                    cornerRadius = 12.dp,
+                    cornerRadius = 14.dp,
                     showVinylGrooves = false,
-                    modifier = Modifier.size(46.dp)
+                    modifier = Modifier.size(48.dp)
                 )
             }
 
@@ -137,7 +137,7 @@ fun PixelMiniPlayer(
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
-                        .size(38.dp)
+                        .size(40.dp)
                         .scale(playScale)
                         .clip(CircleShape)
                         .background(MonochromeWhite)
