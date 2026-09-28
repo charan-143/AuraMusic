@@ -164,7 +164,7 @@ fun MainScreen(
                     verticalArrangement = Arrangement.spacedBy(16.dp)
                 ) {
                     // ==========================================
-                    // 1. HOME TAB (Clean Soundscape & Now Playing)
+                    // 1. HOME TAB (Recommendations & Soundscapes)
                     // ==========================================
                     if (currentTab == PixelNavTab.HOME) {
                         val currentTrack = playerState.currentTrack
@@ -239,128 +239,152 @@ fun MainScreen(
                             }
                         }
 
-                        if (filteredTracks.isEmpty()) {
-                            // Clean State Card (Zero hardcoded preset songs)
-                            item {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(28.dp))
-                                        .background(colors.cardBackground)
-                                        .border(1.dp, colors.outlineVariant, RoundedCornerShape(28.dp))
-                                        .padding(24.dp)
-                                ) {
-                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Box(
-                                            contentAlignment = Alignment.Center,
-                                            modifier = Modifier
-                                                .size(56.dp)
-                                                .clip(RoundedCornerShape(20.dp))
-                                                .background(colors.surfaceContainer)
-                                                .border(1.dp, colors.outlineVariant, RoundedCornerShape(20.dp))
-                                        ) {
-                                            Icon(
-                                                imageVector = Icons.Default.MusicNote,
-                                                contentDescription = "Clean Soundscape",
-                                                tint = colors.textPrimary,
-                                                modifier = Modifier.size(28.dp)
-                                            )
-                                        }
-                                        Spacer(modifier = Modifier.height(14.dp))
+                        // Quick Mood & Vibe Chips Row
+                        item {
+                            LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                val moodChips = listOf("All Recommendations", "Focus & Study", "Lofi Chill", "Cinematic", "Bass Punch", "Acoustic", "Rock")
+                                items(moodChips) { mood ->
+                                    val isSelected = selectedCategory.equals(mood, ignoreCase = true)
+                                    Box(
+                                        contentAlignment = Alignment.Center,
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(18.dp))
+                                            .background(if (isSelected) colors.activePillBackground else colors.surfaceContainer)
+                                            .border(1.dp, if (isSelected) colors.activePillBackground else colors.outlineVariant, RoundedCornerShape(18.dp))
+                                            .clickable {
+                                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                                                if (mood == "All Recommendations") viewModel.setCategory("All Tracks") else viewModel.searchGenre(mood)
+                                            }
+                                            .padding(horizontal = 14.dp, vertical = 7.dp)
+                                    ) {
                                         Text(
-                                            text = "Clean Soundscape",
-                                            fontSize = 18.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = colors.textPrimary
+                                            text = mood,
+                                            fontSize = 11.sp,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                            color = if (isSelected) colors.activePillText else colors.textPrimary
                                         )
-                                        Spacer(modifier = Modifier.height(6.dp))
-                                        Text(
-                                            text = "Preset songs removed. Search online for Spotify & YouTube Music tracks and albums, or connect your local library.",
-                                            fontSize = 13.sp,
-                                            color = colors.textSecondary,
-                                            textAlign = androidx.compose.ui.text.style.TextAlign.Center,
-                                            lineHeight = 18.sp
-                                        )
-                                        Spacer(modifier = Modifier.height(20.dp))
+                                    }
+                                }
+                            }
+                        }
+
+                        // Algorithmic Recommendations Sections ("For You", "Trending on Spotify", "Hot on YouTube Music", "Lossless Masterworks")
+                        if (recommendations.isNotEmpty()) {
+                            items(
+                                items = recommendations,
+                                key = { it.id }
+                            ) { section ->
+                                if (section.albums.isNotEmpty() || section.tracks.isNotEmpty()) {
+                                    Column(modifier = Modifier.fillMaxWidth()) {
                                         Row(
-                                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            horizontalArrangement = Arrangement.SpaceBetween,
                                             modifier = Modifier.fillMaxWidth()
                                         ) {
-                                            Box(
-                                                contentAlignment = Alignment.Center,
-                                                modifier = Modifier
-                                                    .weight(1f)
-                                                    .height(44.dp)
-                                                    .clip(RoundedCornerShape(22.dp))
-                                                    .background(colors.activePillBackground)
-                                                    .clickable { viewModel.setNavTab(PixelNavTab.SEARCH) }
-                                            ) {
-                                                Row(verticalAlignment = Alignment.CenterVertically) {
-                                                    Icon(
-                                                        imageVector = Icons.Default.Search,
-                                                        contentDescription = "Search",
-                                                        tint = colors.activePillText,
-                                                        modifier = Modifier.size(16.dp)
-                                                    )
-                                                    Spacer(modifier = Modifier.width(6.dp))
-                                                    Text(
-                                                        text = "Search Online",
-                                                        fontSize = 12.sp,
-                                                        fontWeight = FontWeight.Bold,
-                                                        color = colors.activePillText
-                                                    )
-                                                }
-                                            }
-
-                                            Box(
-                                                contentAlignment = Alignment.Center,
-                                                modifier = Modifier
-                                                    .weight(1f)
-                                                    .height(44.dp)
-                                                    .clip(RoundedCornerShape(22.dp))
-                                                    .background(colors.surfaceContainer)
-                                                    .border(1.dp, colors.outlineVariant, RoundedCornerShape(22.dp))
-                                                    .clickable { viewModel.setNavTab(PixelNavTab.LIBRARY) }
-                                            ) {
+                                            Column(modifier = Modifier.weight(1f)) {
                                                 Text(
-                                                    text = "Open Library",
-                                                    fontSize = 12.sp,
+                                                    text = section.title,
+                                                    fontSize = 16.sp,
                                                     fontWeight = FontWeight.Bold,
                                                     color = colors.textPrimary
                                                 )
+                                                Text(
+                                                    text = section.subtitle,
+                                                    fontSize = 11.sp,
+                                                    color = colors.textSecondary
+                                                )
+                                            }
+                                            Box(
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(6.dp))
+                                                    .background(colors.surfaceContainer)
+                                                    .border(0.5.dp, colors.outlineVariant, RoundedCornerShape(6.dp))
+                                                    .padding(horizontal = 6.dp, vertical = 2.dp)
+                                            ) {
+                                                Text(
+                                                    text = section.source.displayName.uppercase(),
+                                                    fontSize = 8.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = colors.textPrimary
+                                                )
+                                            }
+                                        }
+
+                                        if (section.albums.isNotEmpty()) {
+                                            Spacer(modifier = Modifier.height(10.dp))
+                                            LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                                                items(
+                                                    items = section.albums,
+                                                    key = { it.id }
+                                                ) { album ->
+                                                    PixelAlbumCard(
+                                                        album = album,
+                                                        onClick = { viewModel.openAlbum(album) },
+                                                        onPlayClick = { viewModel.playAlbum(album) }
+                                                    )
+                                                }
+                                            }
+                                        }
+
+                                        if (section.tracks.isNotEmpty()) {
+                                            Spacer(modifier = Modifier.height(10.dp))
+                                            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                                section.tracks.forEach { track ->
+                                                    val isSelected = playerState.currentTrack?.id == track.id
+                                                    PixelTrackTile(
+                                                        track = track,
+                                                        isSelected = isSelected,
+                                                        isPlaying = playerState.isPlaying,
+                                                        onClick = { viewModel.playTrack(track) },
+                                                        onMoreClick = { viewModel.openAddToPlaylist(track) }
+                                                    )
+                                                }
                                             }
                                         }
                                     }
                                 }
                             }
                         } else {
+                            // Fallback / Refreshing State
                             item {
-                                Text(
-                                    text = "SOUNDSCAPE SONGS (${filteredTracks.size})",
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = 1.1.sp,
-                                    color = colors.textSecondary
-                                )
-                            }
-                            items(
-                                items = filteredTracks,
-                                key = { it.id }
-                            ) { track ->
-                                val isSelected = playerState.currentTrack?.id == track.id
-                                PixelTrackTile(
-                                    track = track,
-                                    isSelected = isSelected,
-                                    isPlaying = playerState.isPlaying,
-                                    onClick = { viewModel.playTrack(track) },
-                                    onMoreClick = { viewModel.openAddToPlaylist(track) }
-                                )
+                                Box(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .clip(RoundedCornerShape(24.dp))
+                                        .background(colors.cardBackground)
+                                        .border(1.dp, colors.outlineVariant, RoundedCornerShape(24.dp))
+                                        .padding(20.dp)
+                                ) {
+                                    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                                        CircularProgressIndicator(
+                                            modifier = Modifier.size(24.dp),
+                                            color = colors.textPrimary,
+                                            strokeWidth = 2.dp
+                                        )
+                                        Spacer(modifier = Modifier.height(12.dp))
+                                        Text(
+                                            text = "Curating Recommendations...",
+                                            fontSize = 14.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = colors.textPrimary
+                                        )
+                                        Spacer(modifier = Modifier.height(4.dp))
+                                        Text(
+                                            text = "Synthesizing lossless streams and trending albums for you.",
+                                            fontSize = 11.sp,
+                                            color = colors.textSecondary
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
 
                     // ========================================================
-                    // 2. SEARCH & FOR YOU TAB (Combined Discovery & Streaming)
+                    // 2. SEARCH TAB (Rich Discovery, Trending Searches & Full Streaming)
                     // ========================================================
                     else if (currentTab == PixelNavTab.SEARCH) {
                         // Search Bar Input
@@ -387,7 +411,7 @@ fun MainScreen(
                                     Box(modifier = Modifier.weight(1f)) {
                                         if (searchQuery.isEmpty()) {
                                             Text(
-                                                text = "Search Spotify & YouTube Music...",
+                                                text = "Search songs, albums, or artists...",
                                                 color = colors.textTertiary,
                                                 fontSize = 13.sp,
                                                 maxLines = 1,
@@ -421,7 +445,7 @@ fun MainScreen(
                             }
                         }
 
-                        // Source & Format Filter Chips Row (Spotify, YouTube, Lossless, Albums)
+                        // Source Filter Chips Row (All, Spotify, YouTube Music, Lossless FLAC, Albums)
                         item {
                             LazyRow(
                                 horizontalArrangement = Arrangement.spacedBy(8.dp),
@@ -440,7 +464,7 @@ fun MainScreen(
                                                 viewModel.setCategory(filter)
                                             }
                                             .padding(horizontal = 14.dp, vertical = 7.dp)
-                                        ) {
+                                    ) {
                                         Text(
                                             text = filter,
                                             fontSize = 11.sp,
@@ -452,184 +476,247 @@ fun MainScreen(
                             }
                         }
 
-                        // Genre Quick Chips Row
-                        item {
-                            LazyRow(
-                                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                items(genreExploreChips) { genre ->
-                                    val isSelected = searchQuery.equals(genre, ignoreCase = true)
-                                    Box(
-                                        contentAlignment = Alignment.Center,
-                                        modifier = Modifier
-                                            .clip(RoundedCornerShape(18.dp))
-                                            .background(if (isSelected) colors.activePillBackground else colors.surfaceContainer)
-                                            .border(1.dp, colors.outlineVariant, RoundedCornerShape(18.dp))
-                                            .clickable {
-                                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                                                if (genre == "All") viewModel.setSearchQuery("") else viewModel.setSearchQuery(genre)
-                                            }
-                                            .padding(horizontal = 14.dp, vertical = 7.dp)
+                        if (searchQuery.isBlank()) {
+                            // ==========================================
+                            // EMPTY STATE: RICH DISCOVERY (Never Empty!)
+                            // ==========================================
+
+                            // 1. Trending Searches Carousel / Pills
+                            item {
+                                Column(modifier = Modifier.fillMaxWidth()) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.fillMaxWidth()
                                     ) {
-                                        Text(
-                                            text = genre,
-                                            fontSize = 11.sp,
-                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                            color = if (isSelected) colors.activePillText else colors.textPrimary
+                                        Icon(
+                                            imageVector = Icons.Default.TravelExplore,
+                                            contentDescription = null,
+                                            tint = colors.textSecondary,
+                                            modifier = Modifier.size(14.dp)
                                         )
+                                        Spacer(modifier = Modifier.width(6.dp))
+                                        Text(
+                                            text = "TRENDING SEARCHES",
+                                            fontSize = 10.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            letterSpacing = 1.1.sp,
+                                            color = colors.textSecondary
+                                        )
+                                    }
+                                    Spacer(modifier = Modifier.height(10.dp))
+                                    LazyRow(
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        val trendingSearches = listOf(
+                                            "Hans Zimmer", "Believer", "Arijit Singh", "Interstellar",
+                                            "Coldplay", "Daft Punk", "Taylor Swift", "The Weeknd",
+                                            "Ed Sheeran", "Imagine Dragons", "Starboy", "Shape of You"
+                                        )
+                                        items(trendingSearches) { term ->
+                                            Box(
+                                                contentAlignment = Alignment.Center,
+                                                modifier = Modifier
+                                                    .clip(RoundedCornerShape(18.dp))
+                                                    .background(colors.surfaceContainer)
+                                                    .border(1.dp, colors.outlineVariant, RoundedCornerShape(18.dp))
+                                                    .clickable {
+                                                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                                                        viewModel.searchTrending(term)
+                                                    }
+                                                    .padding(horizontal = 14.dp, vertical = 8.dp)
+                                            ) {
+                                                Text(
+                                                    text = term,
+                                                    fontSize = 12.sp,
+                                                    fontWeight = FontWeight.Medium,
+                                                    color = colors.textPrimary
+                                                )
+                                            }
+                                        }
                                     }
                                 }
                             }
-                        }
 
-                        // Online Searching Loading Indicator
-                        if (isSearchingOnline) {
+                            // 2. Browse by Genres & Moods (2-column tactile squircle cards)
                             item {
                                 Row(
                                     verticalAlignment = Alignment.CenterVertically,
-                                    modifier = Modifier.padding(vertical = 8.dp)
+                                    modifier = Modifier.fillMaxWidth().padding(top = 8.dp)
                                 ) {
-                                    CircularProgressIndicator(
-                                        strokeWidth = 2.dp,
-                                        color = colors.textPrimary,
-                                        modifier = Modifier.size(16.dp)
+                                    Icon(
+                                        imageVector = Icons.Default.Headphones,
+                                        contentDescription = null,
+                                        tint = colors.textSecondary,
+                                        modifier = Modifier.size(14.dp)
                                     )
-                                    Spacer(modifier = Modifier.width(10.dp))
+                                    Spacer(modifier = Modifier.width(6.dp))
                                     Text(
-                                        text = "Searching online Spotify & YouTube Music...",
-                                        fontSize = 12.sp,
+                                        text = "BROWSE GENRES & MOODS",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        letterSpacing = 1.1.sp,
                                         color = colors.textSecondary
                                     )
                                 }
                             }
-                        }
 
-                        // Online Albums Search Result Row
-                        if (filteredAlbums.isNotEmpty()) {
-                            item {
-                                Text(
-                                    text = "ALBUMS (${filteredAlbums.size})",
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = 1.1.sp,
-                                    color = colors.textSecondary
-                                )
-                                Spacer(modifier = Modifier.height(8.dp))
-                                LazyRow(
-                                    horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            val genreCards = listOf(
+                                Pair("Pop Hits", "Top Global Charts"),
+                                Pair("Electronic", "Synthwave & EDM"),
+                                Pair("Rock & Indie", "Modern & Classic"),
+                                Pair("Lofi Chill", "Study & Relax Beats"),
+                                Pair("Cinematic", "Hans Zimmer & OSTs"),
+                                Pair("Hip Hop", "Urban Beats & Flow"),
+                                Pair("Acoustic", "Unplugged & Folk"),
+                                Pair("Bollywood", "Soulful Indian Classics")
+                            )
+
+                            // Render 2 cards per row in LazyColumn
+                            items(genreCards.chunked(2)) { rowPairs ->
+                                Row(
+                                    horizontalArrangement = Arrangement.spacedBy(10.dp),
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    items(
-                                        items = filteredAlbums,
-                                        key = { it.id }
-                                    ) { album ->
-                                        PixelAlbumCard(
-                                            album = album,
-                                            onClick = { viewModel.openAlbum(album) },
-                                            onPlayClick = { viewModel.playAlbum(album) }
+                                    rowPairs.forEach { pair ->
+                                        Box(
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .clip(RoundedCornerShape(20.dp))
+                                                .background(colors.cardBackground)
+                                                .border(1.dp, colors.outlineVariant, RoundedCornerShape(20.dp))
+                                            .clickable {
+                                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                                                viewModel.searchGenre(pair.first)
+                                            }
+                                            .padding(14.dp)
+                                        ) {
+                                            Column {
+                                                Text(
+                                                    text = pair.first,
+                                                    fontSize = 13.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = colors.textPrimary
+                                                )
+                                                Spacer(modifier = Modifier.height(2.dp))
+                                                Text(
+                                                    text = pair.second,
+                                                    fontSize = 10.sp,
+                                                    color = colors.textSecondary,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                            }
+                                        }
+                                    }
+                                    if (rowPairs.size == 1) {
+                                        Spacer(modifier = Modifier.weight(1f))
+                                    }
+                                }
+                            }
+                        } else {
+                            // ==========================================
+                            // ACTIVE SEARCH QUERY RESULTS
+                            // ==========================================
+
+                            if (isSearchingOnline) {
+                                item {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.padding(vertical = 8.dp)
+                                    ) {
+                                        CircularProgressIndicator(
+                                            strokeWidth = 2.dp,
+                                            color = colors.textPrimary,
+                                            modifier = Modifier.size(16.dp)
+                                        )
+                                        Spacer(modifier = Modifier.width(10.dp))
+                                        Text(
+                                            text = "Searching online Spotify & YouTube Music (320kbps Lossless)...",
+                                            fontSize = 12.sp,
+                                            color = colors.textSecondary
                                         )
                                     }
                                 }
                             }
-                        }
 
-                        // Matching Songs List
-                        if (filteredTracks.isNotEmpty()) {
-                            item {
-                                Text(
-                                    text = "SONGS (${filteredTracks.size})",
-                                    fontSize = 10.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    letterSpacing = 1.1.sp,
-                                    color = colors.textSecondary
-                                )
-                            }
-                            items(
-                                items = filteredTracks,
-                                key = { it.id }
-                            ) { track ->
-                                val isSelected = playerState.currentTrack?.id == track.id
-                                PixelTrackTile(
-                                    track = track,
-                                    isSelected = isSelected,
-                                    isPlaying = playerState.isPlaying,
-                                    onClick = { viewModel.playTrack(track) },
-                                    onMoreClick = { viewModel.openAddToPlaylist(track) }
-                                )
-                            }
-                        }
-
-                        // Algorithmic Recommendations ("For You" Carousels)
-                        items(
-                            items = recommendations,
-                            key = { it.id }
-                        ) { section ->
-                            if (section.albums.isNotEmpty() || section.tracks.isNotEmpty()) {
-                                Column(modifier = Modifier.fillMaxWidth()) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        horizontalArrangement = Arrangement.SpaceBetween,
+                            // Matching Albums Row
+                            if (filteredAlbums.isNotEmpty()) {
+                                item {
+                                    Text(
+                                        text = "MATCHING ALBUMS (${filteredAlbums.size})",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        letterSpacing = 1.1.sp,
+                                        color = colors.textSecondary
+                                    )
+                                    Spacer(modifier = Modifier.height(8.dp))
+                                    LazyRow(
+                                        horizontalArrangement = Arrangement.spacedBy(12.dp),
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
-                                        Column {
-                                            Text(
-                                                text = section.title,
-                                                fontSize = 16.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = colors.textPrimary
-                                            )
-                                            Text(
-                                                text = section.subtitle,
-                                                fontSize = 11.sp,
-                                                color = colors.textSecondary
-                                            )
-                                        }
-                                        Box(
-                                            modifier = Modifier
-                                                .clip(RoundedCornerShape(6.dp))
-                                                .background(colors.surfaceContainer)
-                                                .border(0.5.dp, colors.outlineVariant, RoundedCornerShape(6.dp))
-                                                .padding(horizontal = 6.dp, vertical = 2.dp)
-                                        ) {
-                                            Text(
-                                                text = section.source.displayName.uppercase(),
-                                                fontSize = 8.sp,
-                                                fontWeight = FontWeight.Bold,
-                                                color = colors.textPrimary
+                                        items(
+                                            items = filteredAlbums,
+                                            key = { it.id }
+                                        ) { album ->
+                                            PixelAlbumCard(
+                                                album = album,
+                                                onClick = { viewModel.openAlbum(album) },
+                                                onPlayClick = { viewModel.playAlbum(album) }
                                             )
                                         }
                                     }
+                                }
+                            }
 
-                                    if (section.albums.isNotEmpty()) {
-                                        Spacer(modifier = Modifier.height(10.dp))
-                                        LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                            items(
-                                                items = section.albums,
-                                                key = { it.id }
-                                            ) { album ->
-                                                PixelAlbumCard(
-                                                    album = album,
-                                                    onClick = { viewModel.openAlbum(album) },
-                                                    onPlayClick = { viewModel.playAlbum(album) }
-                                                )
-                                            }
-                                        }
-                                    }
-
-                                    if (section.tracks.isNotEmpty()) {
-                                        Spacer(modifier = Modifier.height(10.dp))
-                                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                                            section.tracks.forEach { track ->
-                                                val isSelected = playerState.currentTrack?.id == track.id
-                                                PixelTrackTile(
-                                                    track = track,
-                                                    isSelected = isSelected,
-                                                    isPlaying = playerState.isPlaying,
-                                                    onClick = { viewModel.playTrack(track) },
-                                                    onMoreClick = { viewModel.openAddToPlaylist(track) }
-                                                )
-                                            }
+                            // Matching Songs List
+                            if (filteredTracks.isNotEmpty()) {
+                                item {
+                                    Text(
+                                        text = "MATCHING SONGS (${filteredTracks.size})",
+                                        fontSize = 10.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        letterSpacing = 1.1.sp,
+                                        color = colors.textSecondary
+                                    )
+                                }
+                                items(
+                                    items = filteredTracks,
+                                    key = { it.id }
+                                ) { track ->
+                                    val isSelected = playerState.currentTrack?.id == track.id
+                                    PixelTrackTile(
+                                        track = track,
+                                        isSelected = isSelected,
+                                        isPlaying = playerState.isPlaying,
+                                        onClick = { viewModel.playTrack(track) },
+                                        onMoreClick = { viewModel.openAddToPlaylist(track) }
+                                    )
+                                }
+                            } else if (!isSearchingOnline) {
+                                item {
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(22.dp))
+                                            .background(colors.cardBackground)
+                                            .border(1.dp, colors.outlineVariant, RoundedCornerShape(22.dp))
+                                            .padding(20.dp)
+                                    ) {
+                                        Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+                                            Text(
+                                                text = "No results found for \"$searchQuery\"",
+                                                fontSize = 14.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = colors.textPrimary
+                                            )
+                                            Spacer(modifier = Modifier.height(4.dp))
+                                            Text(
+                                                text = "Try searching an artist, track title, or choose from trending tags.",
+                                                fontSize = 12.sp,
+                                                color = colors.textSecondary,
+                                                textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                            )
                                         }
                                     }
                                 }
