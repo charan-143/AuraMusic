@@ -32,7 +32,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     private val prefs = application.getSharedPreferences("aura_music_settings", Context.MODE_PRIVATE)
 
     private val audioRepository = AudioRepository(application)
-    private val playerManager = MusicPlayerManager(application)
+    private val playerManager = MusicPlayerManager.getInstance(application)
     private val networkObserver = NetworkQualityObserver(application)
     private val playlistRepository = PlaylistRepository(application, audioRepository)
     private val recommendationEngine = RecommendationEngine(audioRepository)
