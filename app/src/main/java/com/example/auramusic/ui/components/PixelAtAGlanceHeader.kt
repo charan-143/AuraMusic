@@ -52,8 +52,10 @@ fun PixelAtAGlanceHeader(
     qualityBadge: String = "24-BIT FLAC",
     isTravelMode: Boolean = true,
     isDarkMode: Boolean = true,
+    activeAudioDevice: String = "Pixel Buds",
     onTravelModeToggle: () -> Unit = {},
-    onThemeToggle: () -> Unit = {}
+    onThemeToggle: () -> Unit = {},
+    onAudioRouteClick: () -> Unit = {}
 ) {
     val haptic = LocalHapticFeedback.current
     val colors = PixelTheme.colors
@@ -145,6 +147,10 @@ fun PixelAtAGlanceHeader(
                         .clip(RoundedCornerShape(percent = 50))
                         .background(colors.surfaceContainer)
                         .border(1.dp, colors.outlineVariant, RoundedCornerShape(percent = 50))
+                        .clickable {
+                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                            onAudioRouteClick()
+                        }
                         .padding(horizontal = 9.dp, vertical = 6.dp)
                 ) {
                     Icon(
@@ -155,7 +161,7 @@ fun PixelAtAGlanceHeader(
                     )
                     Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = "Pixel Buds",
+                        text = if (activeAudioDevice.length > 12) activeAudioDevice.take(10) + "…" else activeAudioDevice,
                         color = colors.textSecondary,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Medium

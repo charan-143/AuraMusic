@@ -17,7 +17,9 @@ data class PlayerState(
     val volume: Float = 1.0f,
     val isTravelModeEnabled: Boolean = true,
     val bitrateMode: AudioBitrateMode = AudioBitrateMode.LOSSLESS_MASTER,
-    val networkStatusText: String = "5G Lossless Connected"
+    val networkStatusText: String = "5G Lossless Connected",
+    val sleepTimerRemainingSec: Int? = null,
+    val activeAudioOutputDevice: String = "Pixel Buds Pro"
 ) {
     val progress: Float
         get() = if (durationMs > 0) (currentPositionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) else 0f

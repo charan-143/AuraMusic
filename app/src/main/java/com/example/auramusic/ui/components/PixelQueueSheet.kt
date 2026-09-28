@@ -2,6 +2,7 @@ package com.example.auramusic.ui.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -9,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -16,8 +18,9 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.ClearAll
 import androidx.compose.material.icons.filled.Close
-import androidx.compose.material.icons.filled.DragHandle
+import androidx.compose.material.icons.filled.DeleteSweep
 import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -26,6 +29,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -47,14 +51,19 @@ fun PixelQueueSheet(
     onTrackClick: (Track) -> Unit,
     onCloseClick: () -> Unit,
     onShuffleClick: () -> Unit,
+    onClearQueue: () -> Unit = {},
+    onRemoveTrack: (Track) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
+    val haptic = LocalHapticFeedback.current
+
     Column(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp))
             .background(MonochromeSurface)
             .border(1.dp, MonochromeOutline, RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp))
+            .navigationBarsPadding()
             .padding(top = 12.dp, bottom = 24.dp)
     ) {
         // Drag Pill Handle
@@ -69,7 +78,7 @@ fun PixelQueueSheet(
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        // Header: Queue title, track count, Close
+        // Header: Queue title, track count, Actions
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -94,7 +103,13 @@ fun PixelQueueSheet(
             }
 
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = onShuffleClick) {
+                // Shuffle Queue Button
+                IconButton(
+                    onClick = {
+                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                        onShuffleClick()
+                    }
+                ) {
                     Icon(
                         imageVector = Icons.Default.Shuffle,
                         contentDescription = "Shuffle Queue",
@@ -103,6 +118,24 @@ fun PixelQueueSheet(
                     )
                 }
 
+                // Clear Queue Button
+                if (queue.size > 1) {
+                    IconButton(
+                        onClick = {
+                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                            onClearQueue()
+                        }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.DeleteSweep,
+                            contentDescription = "Clear Queue",
+                            tint = MonochromeSilver,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+                }
+
+                // Close Queue Button
                 IconButton(onClick = onCloseClick) {
                     Icon(
                         imageVector = Icons.Default.Close,
@@ -123,14 +156,41 @@ fun PixelQueueSheet(
                 .weight(1f, fill = false)
                 .padding(horizontal = 12.dp)
         ) {
-            itemsIndexed(queue) { index, track ->
+            itemsIndexed(
+                items = queue,
+                key = { index, track -> "${track.id}_$index" }
+            ) { index, track ->
                 val isSelected = track.id == currentTrackId
-                PixelTrackTile(
-                    track = track,
-                    isSelected = isSelected,
-                    isPlaying = isPlaying,
-                    onClick = { onTrackClick(track) }
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Box(modifier = Modifier.weight(1f)) {
+                        PixelTrackTile(
+                            track = track,
+                            isSelected = isSelected,
+                            isPlaying = isPlaying,
+                            onClick = { onTrackClick(track) },
+                            onMoreClick = { onRemoveTrack(track) }
+                        )
+                    }
+
+                    // Direct remove button from queue
+                    IconButton(
+                        onClick = {
+                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                            onRemoveTrack(track)
+                        },
+                        modifier = Modifier.size(36.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Close,
+                            contentDescription = "Remove from Queue",
+                            tint = MonochromeSilver,
+                            modifier = Modifier.size(16.dp)
+                        )
+                    }
+                }
             }
         }
     }

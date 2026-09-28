@@ -41,6 +41,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     val playerState: StateFlow<PlayerState> = playerManager.playerState
     val networkStatus = networkObserver.networkStatus
     val playlists: StateFlow<List<Playlist>> = playlistRepository.playlists
+    val favoriteTrackIds: StateFlow<Set<String>> = playlistRepository.favoriteTrackIds
 
     // Theme Mode: Light Mode vs Dark Mode (Defaults to OLED Dark)
     private val _isDarkMode = MutableStateFlow(prefs.getBoolean("pref_is_dark_mode", true))
@@ -110,6 +111,12 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     private val _isQueueVisible = MutableStateFlow(false)
     val isQueueVisible: StateFlow<Boolean> = _isQueueVisible.asStateFlow()
 
+    private val _isAudioRouteSheetVisible = MutableStateFlow(false)
+    val isAudioRouteSheetVisible: StateFlow<Boolean> = _isAudioRouteSheetVisible.asStateFlow()
+
+    private val _isSleepTimerDialogVisible = MutableStateFlow(false)
+    val isSleepTimerDialogVisible: StateFlow<Boolean> = _isSleepTimerDialogVisible.asStateFlow()
+
     val categories = listOf(
         "All Tracks",
         "Albums",
@@ -127,7 +134,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         _searchQuery,
         _selectedCategory
     ) { localTracks, onlineTracks, query, category ->
-        if (query.isNotBlank()) {
+        val pool = if (query.isNotBlank()) {
             val localMatches = localTracks.filter { track ->
                 track.title.contains(query, ignoreCase = true) ||
                 track.artist.contains(query, ignoreCase = true) ||
@@ -136,12 +143,18 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
             }
             (localMatches + onlineTracks).distinctBy { "${it.title.lowercase().trim()}_${it.artist.lowercase().trim()}" }
         } else {
-            localTracks.filter { track ->
-                when (category) {
-                    "All Tracks", "Albums", "My Playlists" -> true
-                    else -> track.category.equals(category, ignoreCase = true) ||
-                            track.source.displayName.equals(category, ignoreCase = true)
-                }
+            localTracks
+        }
+
+        when (category) {
+            "All Tracks", "All", "My Playlists" -> pool
+            "Albums" -> emptyList()
+            "Spotify" -> pool.filter { it.source == com.example.auramusic.model.StreamingSource.SPOTIFY }
+            "YouTube Music" -> pool.filter { it.source == com.example.auramusic.model.StreamingSource.YOUTUBE_MUSIC }
+            "Lossless FLAC" -> pool.filter { it.isLossless }
+            else -> pool.filter {
+                it.category.equals(category, ignoreCase = true) ||
+                it.source.displayName.equals(category, ignoreCase = true)
             }
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
@@ -153,7 +166,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         _searchQuery,
         _selectedCategory
     ) { localAlbums, onlineAlbums, query, category ->
-        if (query.isNotBlank()) {
+        val pool = if (query.isNotBlank()) {
             val localMatches = localAlbums.filter { album ->
                 album.title.contains(query, ignoreCase = true) ||
                 album.artist.contains(query, ignoreCase = true) ||
@@ -162,15 +175,15 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
             }
             (localMatches + onlineAlbums).distinctBy { "${it.title.lowercase().trim()}_${it.artist.lowercase().trim()}" }
         } else {
-            localAlbums.filter { album ->
-                when (category) {
-                    "All Tracks", "Albums" -> true
-                    "Spotify" -> album.source.displayName.contains("Spotify", ignoreCase = true)
-                    "YouTube Music" -> album.source.displayName.contains("YouTube", ignoreCase = true)
-                    "Lossless FLAC" -> album.isLossless
-                    else -> true
-                }
-            }
+            localAlbums
+        }
+
+        when (category) {
+            "All Tracks", "All", "Albums" -> pool
+            "Spotify" -> pool.filter { it.source.displayName.contains("Spotify", ignoreCase = true) }
+            "YouTube Music" -> pool.filter { it.source.displayName.contains("YouTube", ignoreCase = true) }
+            "Lossless FLAC" -> pool.filter { it.isLossless }
+            else -> pool
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -404,6 +417,49 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     fun setQueueVisible(visible: Boolean) {
         _isQueueVisible.value = visible
     }
+
+    // Audio Route Sheet Controls
+    fun openAudioRouteSheet() {
+        _isAudioRouteSheetVisible.value = true
+    }
+
+    fun closeAudioRouteSheet() {
+        _isAudioRouteSheetVisible.value = false
+    }
+
+    fun setActiveAudioOutputDevice(name: String) {
+        playerManager.setActiveAudioOutputDevice(name)
+    }
+
+    fun getAudioSessionId(): Int = playerManager.getAudioSessionId()
+
+    // Sleep Timer Controls
+    fun openSleepTimerDialog() {
+        _isSleepTimerDialogVisible.value = true
+    }
+
+    fun closeSleepTimerDialog() {
+        _isSleepTimerDialogVisible.value = false
+    }
+
+    fun setSleepTimer(minutes: Int) {
+        playerManager.setSleepTimer(minutes)
+    }
+
+    // Favorites
+    fun toggleFavorite(track: Track): Boolean = playlistRepository.toggleFavorite(track)
+
+    fun isFavorite(trackId: String): Boolean = playlistRepository.isFavorite(trackId)
+
+    // Playlist deletion
+    fun deletePlaylist(playlistId: String) = playlistRepository.deletePlaylist(playlistId)
+
+    // Queue mutations
+    fun removeFromQueue(trackId: String) = playerManager.removeFromQueue(trackId)
+
+    fun clearQueue() = playerManager.clearQueue()
+
+    fun addToQueue(track: Track) = playerManager.addToQueue(track)
 
     override fun onCleared() {
         super.onCleared()
