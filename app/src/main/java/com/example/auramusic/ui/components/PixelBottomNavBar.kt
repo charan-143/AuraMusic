@@ -18,10 +18,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AutoAwesome
 import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -31,24 +31,20 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.auramusic.theme.MonochromeBlack
-import com.example.auramusic.theme.MonochromeMuted
-import com.example.auramusic.theme.MonochromeOutline
-import com.example.auramusic.theme.MonochromeSilver
-import com.example.auramusic.theme.MonochromeSurface
-import com.example.auramusic.theme.MonochromeWhite
 import com.example.auramusic.theme.PixelMotion
+import com.example.auramusic.theme.PixelTheme
 
 enum class PixelNavTab(val label: String, val icon: ImageVector) {
     HOME("Home", Icons.Default.Home),
-    FOR_YOU("For You", Icons.Default.AutoAwesome),
     SEARCH("Search", Icons.Default.Search),
-    LIBRARY("Library", Icons.Default.LibraryMusic)
+    LIBRARY("Library", Icons.Default.LibraryMusic),
+    SETTINGS("Settings", Icons.Default.Settings)
 }
 
 @Composable
@@ -58,12 +54,13 @@ fun PixelBottomNavBar(
     modifier: Modifier = Modifier
 ) {
     val haptic = LocalHapticFeedback.current
+    val colors = PixelTheme.colors
 
     Box(
         modifier = modifier
             .fillMaxWidth()
-            .background(MonochromeBlack)
-            .border(width = 0.5.dp, color = MonochromeOutline, shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
+            .background(colors.bottomNavBackground)
+            .border(width = 0.5.dp, color = colors.outlineVariant, shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
             .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
             .navigationBarsPadding()
             .padding(horizontal = 16.dp, vertical = 8.dp)
@@ -93,7 +90,7 @@ fun PixelBottomNavBar(
                             haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
                             onTabSelected(tab)
                         }
-                        .padding(horizontal = 12.dp, vertical = 4.dp)
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
                 ) {
                     // Google Pixel Expressive Squircle Pill Indicator
                     Box(
@@ -102,12 +99,12 @@ fun PixelBottomNavBar(
                             .width(52.dp)
                             .height(30.dp)
                             .clip(RoundedCornerShape(15.dp))
-                            .background(if (isSelected) MonochromeWhite else MonochromeBlack)
+                            .background(if (isSelected) colors.activePillBackground else Color.Transparent)
                     ) {
                         Icon(
                             imageVector = tab.icon,
                             contentDescription = tab.label,
-                            tint = if (isSelected) MonochromeBlack else MonochromeSilver,
+                            tint = if (isSelected) colors.activePillText else colors.textSecondary,
                             modifier = Modifier.size(20.dp)
                         )
                     }
@@ -118,7 +115,7 @@ fun PixelBottomNavBar(
                         text = tab.label,
                         fontSize = 11.sp,
                         fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                        color = if (isSelected) MonochromeWhite else MonochromeMuted
+                        color = if (isSelected) colors.textPrimary else colors.textTertiary
                     )
                 }
             }

@@ -21,9 +21,10 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.CellTower
+import androidx.compose.material.icons.filled.DarkMode
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Headphones
+import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -37,12 +38,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.example.auramusic.theme.MonochromeLightGrey
-import com.example.auramusic.theme.MonochromeMuted
-import com.example.auramusic.theme.MonochromeOutline
-import com.example.auramusic.theme.MonochromeSilver
-import com.example.auramusic.theme.MonochromeSurfaceContainer
-import com.example.auramusic.theme.MonochromeWhite
+import com.example.auramusic.theme.PixelTheme
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -55,9 +51,12 @@ fun PixelAtAGlanceHeader(
     networkStatusText: String = "5G Lossless Connected",
     qualityBadge: String = "24-BIT FLAC",
     isTravelMode: Boolean = true,
-    onTravelModeToggle: () -> Unit = {}
+    isDarkMode: Boolean = true,
+    onTravelModeToggle: () -> Unit = {},
+    onThemeToggle: () -> Unit = {}
 ) {
     val haptic = LocalHapticFeedback.current
+    val colors = PixelTheme.colors
     val dateFormat = SimpleDateFormat("EEEE, MMM d", Locale.getDefault())
     val currentDate = dateFormat.format(Date())
 
@@ -83,10 +82,10 @@ fun PixelAtAGlanceHeader(
             verticalAlignment = Alignment.CenterVertically
         ) {
             // Left: At-a-Glance Date and Ambient Status
-            Column {
+            Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = currentDate,
-                    color = MonochromeWhite,
+                    color = colors.textPrimary,
                     fontSize = 22.sp,
                     fontWeight = FontWeight.Bold,
                     letterSpacing = (-0.5).sp
@@ -97,7 +96,7 @@ fun PixelAtAGlanceHeader(
                         modifier = Modifier
                             .size(7.dp)
                             .clip(CircleShape)
-                            .background(if (isPlaying) MonochromeWhite else MonochromeMuted)
+                            .background(if (isPlaying) colors.textPrimary else colors.textTertiary)
                             .graphicsLayer { alpha = if (isPlaying) pulseAlpha else 0.6f }
                     )
                     Spacer(modifier = Modifier.width(6.dp))
@@ -105,40 +104,60 @@ fun PixelAtAGlanceHeader(
                         text = if (isPlaying && activeTrackTitle != null) {
                             "Playing • $activeTrackTitle"
                         } else {
-                            "Monochrome Soundscape"
+                            if (isDarkMode) "OLED Soundscape" else "Monochrome Light"
                         },
-                        color = MonochromeSilver,
+                        color = colors.textSecondary,
                         fontSize = 13.sp,
                         fontWeight = FontWeight.Normal
                     )
                 }
             }
 
-            // Right: Roaming / Travel Shield & Pixel Buds Output Pill
-            Column(horizontalAlignment = Alignment.End) {
-                // Audio Device Pill
+            // Right: Theme Mode Switch Button & Audio Pill
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                // Quick Theme Mode Switch Button (Sun / Moon)
+                Box(
+                    contentAlignment = Alignment.Center,
+                    modifier = Modifier
+                        .size(36.dp)
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(colors.surfaceContainer)
+                        .border(1.dp, colors.outlineVariant, RoundedCornerShape(12.dp))
+                        .clickable {
+                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                            onThemeToggle()
+                        }
+                ) {
+                    Icon(
+                        imageVector = if (isDarkMode) Icons.Default.LightMode else Icons.Default.DarkMode,
+                        contentDescription = if (isDarkMode) "Switch to Light Mode" else "Switch to Dark Mode",
+                        tint = colors.textPrimary,
+                        modifier = Modifier.size(18.dp)
+                    )
+                }
+
+                Spacer(modifier = Modifier.width(8.dp))
+
+                // Audio Output Pill
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
                         .clip(RoundedCornerShape(percent = 50))
-                        .background(MonochromeSurfaceContainer)
-                        .border(1.dp, MonochromeOutline, RoundedCornerShape(percent = 50))
-                        .clickable {
-                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                        }
-                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                        .background(colors.surfaceContainer)
+                        .border(1.dp, colors.outlineVariant, RoundedCornerShape(percent = 50))
+                        .padding(horizontal = 9.dp, vertical = 6.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.Headphones,
                         contentDescription = "Audio Output",
-                        tint = MonochromeWhite,
-                        modifier = Modifier.size(13.dp)
+                        tint = colors.textPrimary,
+                        modifier = Modifier.size(12.dp)
                     )
-                    Spacer(modifier = Modifier.width(5.dp))
+                    Spacer(modifier = Modifier.width(4.dp))
                     Text(
-                        text = "Pixel Buds Pro",
-                        color = MonochromeLightGrey,
-                        fontSize = 11.sp,
+                        text = "Pixel Buds",
+                        color = colors.textSecondary,
+                        fontSize = 10.sp,
                         fontWeight = FontWeight.Medium
                     )
                     if (isPlaying) {
@@ -146,41 +165,10 @@ fun PixelAtAGlanceHeader(
                         Icon(
                             imageVector = Icons.Default.GraphicEq,
                             contentDescription = "Active EQ",
-                            tint = MonochromeWhite,
+                            tint = colors.textPrimary,
                             modifier = Modifier.size(11.dp)
                         )
                     }
-                }
-
-                Spacer(modifier = Modifier.height(4.dp))
-
-                // Network & Travel Roaming Shield Pill
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(percent = 50))
-                        .background(MonochromeSurfaceContainer)
-                        .border(1.dp, MonochromeOutline, RoundedCornerShape(percent = 50))
-                        .clickable {
-                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                            onTravelModeToggle()
-                        }
-                        .padding(horizontal = 9.dp, vertical = 3.dp)
-                ) {
-                    Icon(
-                        imageVector = if (isTravelMode) Icons.Default.Shield else Icons.Default.CellTower,
-                        contentDescription = "Travel Shield",
-                        tint = MonochromeWhite,
-                        modifier = Modifier.size(11.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = if (isTravelMode) "TRAVEL BUFFER ON" else networkStatusText,
-                        color = MonochromeSilver,
-                        fontSize = 9.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 0.5.sp
-                    )
                 }
             }
         }

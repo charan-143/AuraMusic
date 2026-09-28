@@ -1,7 +1,6 @@
 package com.example.auramusic.ui.components
 
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -41,14 +40,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.auramusic.model.Track
-import com.example.auramusic.theme.MonochromeBlack
-import com.example.auramusic.theme.MonochromeLightGrey
-import com.example.auramusic.theme.MonochromeOutline
-import com.example.auramusic.theme.MonochromeSilver
-import com.example.auramusic.theme.MonochromeSurfaceContainer
-import com.example.auramusic.theme.MonochromeSurfaceHigh
-import com.example.auramusic.theme.MonochromeWhite
 import com.example.auramusic.theme.PixelMotion
+import com.example.auramusic.theme.PixelTheme
 
 @Composable
 fun PixelMiniPlayer(
@@ -61,6 +54,7 @@ fun PixelMiniPlayer(
     modifier: Modifier = Modifier
 ) {
     val haptic = LocalHapticFeedback.current
+    val colors = PixelTheme.colors
     val playInteractionSource = remember { MutableInteractionSource() }
     val isPlayPressed by playInteractionSource.collectIsPressedAsState()
 
@@ -78,11 +72,11 @@ fun PixelMiniPlayer(
             .shadow(
                 elevation = 16.dp,
                 shape = RoundedCornerShape(24.dp),
-                ambientColor = Color.White.copy(alpha = 0.08f)
+                ambientColor = if (colors.isDark) Color.White.copy(alpha = 0.08f) else Color.Black.copy(alpha = 0.06f)
             )
             .clip(RoundedCornerShape(24.dp))
-            .background(MonochromeSurfaceContainer)
-            .border(1.dp, MonochromeOutline, RoundedCornerShape(24.dp))
+            .background(colors.miniPlayerBackground)
+            .border(1.dp, colors.outlineVariant, RoundedCornerShape(24.dp))
             .clickable { onExpandClick() }
             .padding(horizontal = 14.dp, vertical = 10.dp)
     ) {
@@ -96,7 +90,7 @@ fun PixelMiniPlayer(
                 modifier = Modifier
                     .size(48.dp)
                     .clip(RoundedCornerShape(14.dp))
-                    .background(MonochromeSurfaceHigh)
+                    .background(colors.surfaceContainer)
             ) {
                 PixelSquircleAlbumArt(
                     coverArtUrl = track.coverArtUrl,
@@ -114,7 +108,7 @@ fun PixelMiniPlayer(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = track.title,
-                    color = MonochromeWhite,
+                    color = colors.textPrimary,
                     fontSize = 14.sp,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
@@ -123,7 +117,7 @@ fun PixelMiniPlayer(
                 Spacer(modifier = Modifier.height(2.dp))
                 Text(
                     text = track.artist,
-                    color = MonochromeSilver,
+                    color = colors.textSecondary,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Normal,
                     maxLines = 1,
@@ -141,7 +135,7 @@ fun PixelMiniPlayer(
                         .size(40.dp)
                         .scale(playScale)
                         .clip(CircleShape)
-                        .background(MonochromeWhite)
+                        .background(colors.activePillBackground)
                         .clickable(
                             interactionSource = playInteractionSource,
                             indication = null
@@ -153,7 +147,7 @@ fun PixelMiniPlayer(
                     Icon(
                         imageVector = if (isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                         contentDescription = if (isPlaying) "Pause" else "Play",
-                        tint = MonochromeBlack,
+                        tint = colors.activePillText,
                         modifier = Modifier.size(20.dp)
                     )
                 }
@@ -170,7 +164,7 @@ fun PixelMiniPlayer(
                     Icon(
                         imageVector = Icons.Default.SkipNext,
                         contentDescription = "Next Track",
-                        tint = MonochromeLightGrey,
+                        tint = colors.textSecondary,
                         modifier = Modifier.size(22.dp)
                     )
                 }

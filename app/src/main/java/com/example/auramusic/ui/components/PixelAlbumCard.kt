@@ -17,7 +17,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Album
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -36,15 +35,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import coil.compose.AsyncImage
 import com.example.auramusic.model.Album
-import com.example.auramusic.theme.MonochromeBlack
-import com.example.auramusic.theme.MonochromeMuted
-import com.example.auramusic.theme.MonochromeOutline
-import com.example.auramusic.theme.MonochromeOutlineVariant
-import com.example.auramusic.theme.MonochromeSilver
-import com.example.auramusic.theme.MonochromeSurface
-import com.example.auramusic.theme.MonochromeSurfaceContainer
-import com.example.auramusic.theme.MonochromeWhite
 import com.example.auramusic.theme.PixelMotion
+import com.example.auramusic.theme.PixelTheme
 
 @Composable
 fun PixelAlbumCard(
@@ -53,6 +45,7 @@ fun PixelAlbumCard(
     onPlayClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
+    val colors = PixelTheme.colors
     val interactionSource = remember { MutableInteractionSource() }
     val isPressed by interactionSource.collectIsPressedAsState()
     val scale by animateFloatAsState(
@@ -66,8 +59,8 @@ fun PixelAlbumCard(
             .width(170.dp)
             .scale(scale)
             .clip(RoundedCornerShape(28.dp))
-            .background(MonochromeSurface)
-            .border(1.dp, MonochromeOutline, RoundedCornerShape(28.dp))
+            .background(colors.cardBackground)
+            .border(1.dp, colors.outlineVariant, RoundedCornerShape(28.dp))
             .clickable(
                 interactionSource = interactionSource,
                 indication = null,
@@ -82,8 +75,8 @@ fun PixelAlbumCard(
                     .fillMaxWidth()
                     .height(146.dp)
                     .clip(RoundedCornerShape(20.dp))
-                    .background(MonochromeSurfaceContainer)
-                    .border(0.5.dp, MonochromeOutlineVariant, RoundedCornerShape(20.dp))
+                    .background(colors.surfaceContainer)
+                    .border(0.5.dp, colors.outlineVariant, RoundedCornerShape(20.dp))
             ) {
                 AsyncImage(
                     model = album.coverArtUrl,
@@ -98,15 +91,15 @@ fun PixelAlbumCard(
                         .padding(8.dp)
                         .align(Alignment.TopStart)
                         .clip(RoundedCornerShape(8.dp))
-                        .background(MonochromeBlack.copy(alpha = 0.85f))
-                        .border(0.5.dp, MonochromeOutlineVariant, RoundedCornerShape(8.dp))
+                        .background(Color.Black.copy(alpha = 0.85f))
+                        .border(0.5.dp, Color.White.copy(alpha = 0.3f), RoundedCornerShape(8.dp))
                         .padding(horizontal = 6.dp, vertical = 2.dp)
                 ) {
                     Text(
                         text = album.qualityBadge,
                         fontSize = 8.sp,
                         fontWeight = FontWeight.Bold,
-                        color = MonochromeWhite
+                        color = Color.White
                     )
                 }
 
@@ -118,13 +111,13 @@ fun PixelAlbumCard(
                         .align(Alignment.BottomEnd)
                         .size(34.dp)
                         .clip(RoundedCornerShape(12.dp))
-                        .background(MonochromeWhite)
+                        .background(colors.activePillBackground)
                         .clickable { onPlayClick() }
                 ) {
                     Icon(
                         imageVector = Icons.Default.PlayArrow,
                         contentDescription = "Play Album",
-                        tint = MonochromeBlack,
+                        tint = colors.activePillText,
                         modifier = Modifier.size(18.dp)
                     )
                 }
@@ -137,7 +130,7 @@ fun PixelAlbumCard(
                 text = album.title,
                 fontSize = 14.sp,
                 fontWeight = FontWeight.Bold,
-                color = MonochromeWhite,
+                color = colors.textPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -152,7 +145,7 @@ fun PixelAlbumCard(
                 Text(
                     text = album.artist,
                     fontSize = 11.sp,
-                    color = MonochromeSilver,
+                    color = colors.textSecondary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.weight(1f, fill = false)
@@ -161,7 +154,7 @@ fun PixelAlbumCard(
                 Text(
                     text = "• ${album.trackCount} tracks",
                     fontSize = 10.sp,
-                    color = MonochromeMuted
+                    color = colors.textTertiary
                 )
             }
         }

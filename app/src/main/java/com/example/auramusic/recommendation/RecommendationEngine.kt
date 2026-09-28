@@ -16,12 +16,33 @@ class RecommendationEngine(private val audioRepository: AudioRepository) {
         val allAlbums = audioRepository.getAllAlbums()
         val allTracks = audioRepository.getMultiSourceTracks()
 
+        if (allTracks.isEmpty() && allAlbums.isEmpty()) {
+            return listOf(
+                RecommendationSection(
+                    id = "rec_spotify_trending",
+                    title = "Trending on Spotify",
+                    subtitle = "Search artists or songs above to stream 320kbps audio",
+                    source = StreamingSource.SPOTIFY,
+                    albums = emptyList(),
+                    tracks = emptyList()
+                ),
+                RecommendationSection(
+                    id = "rec_ytm_hot",
+                    title = "Hot on YouTube Music",
+                    subtitle = "Explore HD Opus tracks and full albums on demand",
+                    source = StreamingSource.YOUTUBE_MUSIC,
+                    albums = emptyList(),
+                    tracks = emptyList()
+                )
+            )
+        }
+
         // 1. Personalized "For You" Section
         val forYouAlbums = if (activeTrack != null) {
             allAlbums.sortedByDescending { it.source == activeTrack.source || it.artist == activeTrack.artist }
-                .take(3)
+                .take(4)
         } else {
-            allAlbums.take(3)
+            allAlbums.take(4)
         }
         val forYouTracks = if (activeTrack != null) {
             allTracks.filter { it.id != activeTrack.id && (it.source == activeTrack.source || it.category == activeTrack.category) }
@@ -39,7 +60,7 @@ class RecommendationEngine(private val audioRepository: AudioRepository) {
             tracks = forYouTracks
         )
 
-        // 2. Spotify Trending Releases (Albums & Tracks)
+        // 2. Spotify Releases
         val spotifyAlbums = allAlbums.filter { it.source == StreamingSource.SPOTIFY }
         val spotifyTracks = allTracks.filter { it.source == StreamingSource.SPOTIFY }
         val spotifySection = RecommendationSection(
@@ -51,7 +72,7 @@ class RecommendationEngine(private val audioRepository: AudioRepository) {
             tracks = spotifyTracks
         )
 
-        // 3. YouTube Music Hot Charts (Albums & Tracks)
+        // 3. YouTube Music Releases
         val ytmAlbums = allAlbums.filter { it.source == StreamingSource.YOUTUBE_MUSIC }
         val ytmTracks = allTracks.filter { it.source == StreamingSource.YOUTUBE_MUSIC }
         val ytmSection = RecommendationSection(
