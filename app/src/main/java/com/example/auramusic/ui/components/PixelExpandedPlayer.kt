@@ -211,7 +211,7 @@ fun PixelExpandedPlayer(
                             .padding(horizontal = 6.dp, vertical = 2.dp)
                     ) {
                         Text(
-                            text = track.qualityBadge,
+                            text = if (playerState.isAutoQualityEnabled) playerState.activeStreamingQualityBadge else track.qualityBadge,
                             fontSize = 9.sp,
                             fontWeight = FontWeight.Bold,
                             color = MonochromeWhite,

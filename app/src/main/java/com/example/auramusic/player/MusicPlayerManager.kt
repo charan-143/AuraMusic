@@ -207,6 +207,89 @@ class MusicPlayerManager(private val context: Context) {
         _playerState.update { it.copy(bitrateMode = mode) }
     }
 
+    fun setAutoQualityEnabled(enabled: Boolean) {
+        _playerState.update { it.copy(isAutoQualityEnabled = enabled) }
+    }
+
+    fun applyAdaptiveQuality(
+        autoQuality: com.example.auramusic.network.AutoAudioQuality,
+        bandwidthKbps: Int,
+        signalPercent: Int,
+        isFluctuating: Boolean = false,
+        fluctuationNote: String = ""
+    ) {
+        if (!_playerState.value.isAutoQualityEnabled) return
+
+        val bitrateMode = when (autoQuality) {
+            com.example.auramusic.network.AutoAudioQuality.LOSSLESS_MASTER -> AudioBitrateMode.LOSSLESS_MASTER
+            com.example.auramusic.network.AutoAudioQuality.HIGH_QUALITY_320 -> AudioBitrateMode.HIGH_QUALITY
+            com.example.auramusic.network.AutoAudioQuality.BALANCED_256 -> AudioBitrateMode.BALANCED
+            com.example.auramusic.network.AutoAudioQuality.DATA_SAVER_128 -> AudioBitrateMode.ADAPTIVE_ROAMING
+            com.example.auramusic.network.AutoAudioQuality.OFFLINE_CACHE -> AudioBitrateMode.ADAPTIVE_ROAMING
+        }
+
+        // Dynamically configure ExoPlayer track selection bitrate constraint
+        try {
+            val maxBitrate = if (autoQuality.targetBitrateKbps > 0) autoQuality.targetBitrateKbps * 1000 else Int.MAX_VALUE
+            exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
+                .buildUpon()
+                .setMaxAudioBitrate(maxBitrate)
+                .build()
+        } catch (e: Exception) {
+            // Safe fallback
+        }
+
+        // Dynamically update stream request headers
+        cacheManager.updateStreamingQualityHeaders(autoQuality.targetBitrateKbps)
+
+        _playerState.update {
+            it.copy(
+                bitrateMode = bitrateMode,
+                activeStreamingQualityBadge = autoQuality.shortBadge,
+                activeStreamingQualityTitle = autoQuality.title,
+                signalStrengthPercent = signalPercent,
+                linkBandwidthKbps = bandwidthKbps,
+                isSignalFluctuating = isFluctuating,
+                autoQualitySwitchNote = if (fluctuationNote.isNotBlank()) fluctuationNote else autoQuality.description
+            )
+        }
+    }
+
+    fun setManualQuality(qualityTitle: String) {
+        val (mode, badge, title, kbps) = when (qualityTitle) {
+            "Spotify High (320kbps)" -> listOf(AudioBitrateMode.HIGH_QUALITY, "HQ 320K", "Spotify High (320kbps)", 320)
+            "YouTube Music Opus (256kbps)" -> listOf(AudioBitrateMode.BALANCED, "OPUS 256K", "YouTube Music Opus (256kbps)", 256)
+            "Data Saver (128kbps / Roaming)", "Data Saver (Roaming Auto)" -> listOf(AudioBitrateMode.ADAPTIVE_ROAMING, "SAVER 128K", "Data Saver (128kbps)", 128)
+            else -> listOf(AudioBitrateMode.LOSSLESS_MASTER, "24-BIT FLAC", "Lossless Master (24-bit FLAC)", 1411)
+        }
+
+        val targetKbps = kbps as Int
+        val targetMode = mode as AudioBitrateMode
+        val targetBadge = badge as String
+        val targetTitle = title as String
+
+        try {
+            exoPlayer.trackSelectionParameters = exoPlayer.trackSelectionParameters
+                .buildUpon()
+                .setMaxAudioBitrate(targetKbps * 1000)
+                .build()
+        } catch (e: Exception) {
+            // Safe fallback
+        }
+
+        cacheManager.updateStreamingQualityHeaders(targetKbps)
+
+        _playerState.update {
+            it.copy(
+                isAutoQualityEnabled = false,
+                bitrateMode = targetMode,
+                activeStreamingQualityBadge = targetBadge,
+                activeStreamingQualityTitle = targetTitle,
+                autoQualitySwitchNote = "Manual Fixed: $targetTitle"
+            )
+        }
+    }
+
     fun updateNetworkStatus(statusText: String) {
         _playerState.update { it.copy(networkStatusText = statusText) }
     }

@@ -57,6 +57,23 @@ class AdaptiveAudioCacheManager(private val context: Context) {
                 )
             )
 
+    fun updateStreamingQualityHeaders(targetBitrateKbps: Int) {
+        val (bitrateHeader, acceptHeader) = when {
+            targetBitrateKbps >= 1000 -> "lossless-24bit" to "audio/flac, audio/x-flac, audio/*; q=1.0"
+            targetBitrateKbps >= 320 -> "320kbps-high" to "audio/mpeg, audio/mp4, audio/*; q=0.9"
+            targetBitrateKbps >= 256 -> "256kbps-opus" to "audio/opus, audio/ogg, audio/*; q=0.9"
+            else -> "128kbps-saver" to "audio/opus, audio/aac, audio/*; q=0.8"
+        }
+        httpDataSourceFactory.setDefaultRequestProperties(
+            mapOf(
+                "Accept" to acceptHeader,
+                "X-Audio-Bitrate" to bitrateHeader,
+                "X-Lossless-Stream" to (targetBitrateKbps >= 1000).toString(),
+                "X-Auto-Adaptive-Quality" to "true"
+            )
+        )
+    }
+
     val cacheDataSourceFactory: DataSource.Factory by lazy {
         CacheDataSource.Factory()
             .setCache(simpleCache)
