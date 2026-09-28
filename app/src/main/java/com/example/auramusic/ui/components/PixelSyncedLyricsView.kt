@@ -80,17 +80,31 @@ fun PixelSyncedLyricsView(
     val lines = lyrics?.lines ?: emptyList()
 
     // Find the currently active line index based on current playback position
+    // If playback is before the first lyric timestamp, activeIndex is -1 (Intro period)
     val activeIndex = remember(currentPositionMs, lines) {
-        val idx = lines.indexOfLast { it.timestampMs <= currentPositionMs }
-        if (idx >= 0) idx else 0
+        if (lines.isEmpty()) -1
+        else if (currentPositionMs < lines.first().timestampMs) -1
+        else lines.indexOfLast { it.timestampMs <= currentPositionMs }
     }
 
     // Auto-scroll to keep active line centered
     LaunchedEffect(activeIndex) {
-        if (lines.isNotEmpty() && activeIndex in lines.indices) {
-            val targetScroll = (activeIndex - 1).coerceAtLeast(0)
-            listState.animateScrollToItem(targetScroll)
+        if (lines.isNotEmpty()) {
+            if (activeIndex in lines.indices) {
+                val targetScroll = (activeIndex - 1).coerceAtLeast(0)
+                listState.animateScrollToItem(targetScroll)
+            } else if (activeIndex == -1) {
+                listState.animateScrollToItem(0)
+            }
         }
+    }
+
+    val badgeText = when {
+        lyrics?.source?.contains("LRCLIB", ignoreCase = true) == true -> "LIVE KARAOKE SYNC"
+        lyrics?.source?.contains("Bank", ignoreCase = true) == true -> "VERIFIED KARAOKE SYNC"
+        lyrics?.source?.contains("Saavn", ignoreCase = true) == true -> "STUDIO VOCAL SYNC"
+        lyrics?.source?.contains("Cadence", ignoreCase = true) == true -> "DYNAMIC CADENCE SYNC"
+        else -> "LIVE SYNCED LYRICS"
     }
 
     // Live pulsing dot animation
@@ -138,7 +152,7 @@ fun PixelSyncedLyricsView(
                     )
                     Spacer(modifier = Modifier.width(6.dp))
                     Text(
-                        text = "LIVE SYNCED LYRICS",
+                        text = badgeText,
                         fontSize = 10.sp,
                         fontWeight = FontWeight.Bold,
                         letterSpacing = 1.1.sp,
