@@ -1,21 +1,29 @@
 package com.example.auramusic.player
 
+import com.example.auramusic.model.AudioBitrateMode
 import com.example.auramusic.model.Track
 
 data class PlayerState(
     val currentTrack: Track? = null,
     val isPlaying: Boolean = false,
     val currentPositionMs: Long = 0L,
+    val bufferedPositionMs: Long = 0L,
     val durationMs: Long = 0L,
     val isShuffle: Boolean = false,
     val isRepeatOne: Boolean = false,
     val playbackSpeed: Float = 1.0f,
     val queue: List<Track> = emptyList(),
     val currentIndex: Int = 0,
-    val volume: Float = 1.0f
+    val volume: Float = 1.0f,
+    val isTravelModeEnabled: Boolean = true,
+    val bitrateMode: AudioBitrateMode = AudioBitrateMode.LOSSLESS_MASTER,
+    val networkStatusText: String = "5G Lossless Connected"
 ) {
     val progress: Float
         get() = if (durationMs > 0) (currentPositionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) else 0f
+
+    val bufferedProgress: Float
+        get() = if (durationMs > 0) (bufferedPositionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) else 0f
 
     val formattedCurrentPosition: String
         get() {

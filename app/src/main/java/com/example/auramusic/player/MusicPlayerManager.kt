@@ -5,6 +5,9 @@ import android.net.Uri
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import com.example.auramusic.cache.AdaptiveAudioCacheManager
+import com.example.auramusic.model.AudioBitrateMode
 import com.example.auramusic.model.Track
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -22,32 +25,42 @@ class MusicPlayerManager(private val context: Context) {
     private val scope = CoroutineScope(Dispatchers.Main + Job())
     private var positionTickerJob: Job? = null
 
-    private val exoPlayer: ExoPlayer by lazy {
-        ExoPlayer.Builder(context).build().apply {
-            addListener(object : Player.Listener {
-                override fun onIsPlayingChanged(isPlaying: Boolean) {
-                    _playerState.update { it.copy(isPlaying = isPlaying) }
-                    if (isPlaying) {
-                        startTicker()
-                    } else {
-                        stopTicker()
-                    }
-                }
+    val cacheManager by lazy { AdaptiveAudioCacheManager(context) }
 
-                override fun onPlaybackStateChanged(playbackState: Int) {
-                    if (playbackState == Player.STATE_READY) {
-                        val duration = exoPlayer.duration.coerceAtLeast(0L)
-                        _playerState.update {
-                            it.copy(
-                                durationMs = if (duration > 0) duration else (it.currentTrack?.durationMs ?: 180000L)
-                            )
+    private val exoPlayer: ExoPlayer by lazy {
+        val mediaSourceFactory = DefaultMediaSourceFactory(cacheManager.cacheDataSourceFactory)
+        val loadControl = cacheManager.createTravelLoadControl()
+
+        ExoPlayer.Builder(context)
+            .setMediaSourceFactory(mediaSourceFactory)
+            .setLoadControl(loadControl)
+            .build()
+            .apply {
+                addListener(object : Player.Listener {
+                    override fun onIsPlayingChanged(isPlaying: Boolean) {
+                        _playerState.update { it.copy(isPlaying = isPlaying) }
+                        if (isPlaying) {
+                            startTicker()
+                        } else {
+                            stopTicker()
                         }
-                    } else if (playbackState == Player.STATE_ENDED) {
-                        skipNext()
                     }
-                }
-            })
-        }
+
+                    override fun onPlaybackStateChanged(playbackState: Int) {
+                        if (playbackState == Player.STATE_READY) {
+                            val duration = exoPlayer.duration.coerceAtLeast(0L)
+                            _playerState.update {
+                                it.copy(
+                                    durationMs = if (duration > 0) duration else (it.currentTrack?.durationMs ?: 180000L),
+                                    bufferedPositionMs = exoPlayer.bufferedPosition
+                                )
+                            }
+                        } else if (playbackState == Player.STATE_ENDED) {
+                            skipNext()
+                        }
+                    }
+                })
+            }
     }
 
     private val _playerState = MutableStateFlow(PlayerState())
@@ -62,9 +75,12 @@ class MusicPlayerManager(private val context: Context) {
                 currentIndex = clampedIndex,
                 currentTrack = tracks[clampedIndex],
                 durationMs = tracks[clampedIndex].durationMs,
-                currentPositionMs = 0L
+                currentPositionMs = 0L,
+                bufferedPositionMs = 0L
             )
         }
+        // Predictive prefetch of next tracks
+        cacheManager.prefetchUpcomingTracks(tracks, clampedIndex)
     }
 
     fun playTrack(track: Track, newQueue: List<Track>? = null) {
@@ -77,10 +93,14 @@ class MusicPlayerManager(private val context: Context) {
                 queue = queue,
                 currentIndex = index,
                 currentPositionMs = 0L,
+                bufferedPositionMs = 0L,
                 durationMs = track.durationMs,
                 isPlaying = true
             )
         }
+
+        // Trigger background preloading of upcoming tracks for seamless traveling
+        cacheManager.prefetchUpcomingTracks(queue, index)
 
         if (track.audioUrl.isNotBlank()) {
             try {
@@ -179,6 +199,18 @@ class MusicPlayerManager(private val context: Context) {
         _playerState.update { it.copy(isRepeatOne = !it.isRepeatOne) }
     }
 
+    fun toggleTravelMode() {
+        _playerState.update { it.copy(isTravelModeEnabled = !it.isTravelModeEnabled) }
+    }
+
+    fun setBitrateMode(mode: AudioBitrateMode) {
+        _playerState.update { it.copy(bitrateMode = mode) }
+    }
+
+    fun updateNetworkStatus(statusText: String) {
+        _playerState.update { it.copy(networkStatusText = statusText) }
+    }
+
     fun setPlaybackSpeed(speed: Float) {
         exoPlayer.setPlaybackSpeed(speed)
         _playerState.update { it.copy(playbackSpeed = speed) }
@@ -193,24 +225,30 @@ class MusicPlayerManager(private val context: Context) {
                     if (exoPlayer.isPlaying) {
                         val current = exoPlayer.currentPosition
                         val duration = exoPlayer.duration.coerceAtLeast(_playerState.value.durationMs)
+                        val buffered = exoPlayer.bufferedPosition
                         _playerState.update {
-                            it.copy(currentPositionMs = current, durationMs = duration)
+                            it.copy(
+                                currentPositionMs = current,
+                                durationMs = duration,
+                                bufferedPositionMs = buffered
+                            )
                         }
                     } else {
                         // Simulated progression
                         _playerState.update { state ->
                             val speedFactor = state.playbackSpeed
                             val newPos = (state.currentPositionMs + (250 * speedFactor).toLong())
+                            // Simulated buffer advances fast ahead of playback (e.g. +60 seconds ahead)
+                            val simulatedBuffer = (newPos + 60000L).coerceAtMost(state.durationMs)
                             if (newPos >= state.durationMs && state.durationMs > 0) {
                                 if (state.isRepeatOne) {
                                     state.copy(currentPositionMs = 0L)
                                 } else {
-                                    // Trigger skip to next
                                     skipNext()
                                     state
                                 }
                             } else {
-                                state.copy(currentPositionMs = newPos)
+                                state.copy(currentPositionMs = newPos, bufferedPositionMs = simulatedBuffer)
                             }
                         }
                     }
