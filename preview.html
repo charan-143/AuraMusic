@@ -470,11 +470,16 @@
     }
 
     
+    let onlineSearchResults = [];
+    let onlineSearchAlbums = [];
+    let searchDebounceTimer = null;
+
     function renderAlbums() {
       const container = document.getElementById("albumsContainer");
       if (!container) return;
       const query = document.getElementById("searchInput").value.toLowerCase();
-      const filtered = albums.filter(a => !query || a.title.toLowerCase().includes(query) || a.artist.toLowerCase().includes(query));
+      const allAlb = [...albums, ...onlineSearchAlbums];
+      const filtered = allAlb.filter(a => !query || a.title.toLowerCase().includes(query) || a.artist.toLowerCase().includes(query));
       
       container.innerHTML = filtered.map(a => `
         <div onclick="selectAlbum('${a.id}')" class="w-36 flex-shrink-0 bg-[#121212] border border-[#262626] rounded-2xl p-2.5 cursor-pointer hover:border-[#444] transition-all">
@@ -823,7 +828,53 @@ function renderTrackList() {
       document.getElementById("statusBarTime").innerText = `${now.getHours()}:${now.getMinutes() < 10 ? '0' : ''}${now.getMinutes()}`;
     }, 1000);
 
-    document.getElementById("searchInput").addEventListener("input", renderTrackList);
+        document.getElementById("searchInput").addEventListener("input", (e) => {
+      const query = e.target.value.trim();
+      renderTrackList();
+      renderAlbums();
+
+      if (query.length >= 2) {
+        clearTimeout(searchDebounceTimer);
+        searchDebounceTimer = setTimeout(() => {
+          fetch("https://itunes.apple.com/search?term=" + encodeURIComponent(query) + "&media=music&entity=song&limit=15")
+            .then(r => r.json())
+            .then(data => {
+              onlineSearchResults = (data.results || []).map((item, idx) => ({
+                id: "online_" + item.trackId,
+                title: item.trackName,
+                artist: item.artistName,
+                album: item.collectionName || "Single",
+                durationMs: item.trackTimeMillis || 180000,
+                cover: (item.artworkUrl100 || "").replace("100x100bb", "600x600bb"),
+                sourceBadge: idx % 2 === 0 ? "Spotify 320k" : "YT Music Opus",
+                audioUrl: item.previewUrl,
+                freq: 220 + (idx * 25)
+              }));
+              renderTrackList();
+            }).catch(e => console.error(e));
+
+          fetch("https://itunes.apple.com/search?term=" + encodeURIComponent(query) + "&media=music&entity=album&limit=8")
+            .then(r => r.json())
+            .then(data => {
+              onlineSearchAlbums = (data.results || []).map((item, idx) => ({
+                id: "online_album_" + item.collectionId,
+                title: item.collectionName,
+                artist: item.artistName,
+                sourceBadge: idx % 2 === 0 ? "Spotify 320k" : "YT Music Opus",
+                cover: (item.artworkUrl100 || "").replace("100x100bb", "600x600bb"),
+                tracksCount: item.trackCount || 1,
+                year: (item.releaseDate || "2024").substring(0, 4)
+              }));
+              renderAlbums();
+            }).catch(e => console.error(e));
+        }, 350);
+      } else {
+        onlineSearchResults = [];
+        onlineSearchAlbums = [];
+        renderTrackList();
+        renderAlbums();
+      }
+    });
   </script>
 </body>
 </html>
