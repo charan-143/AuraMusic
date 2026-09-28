@@ -22,7 +22,9 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -56,67 +58,75 @@ fun PixelBottomNavBar(
     val haptic = LocalHapticFeedback.current
     val colors = PixelTheme.colors
 
-    Box(
-        modifier = modifier
-            .fillMaxWidth()
-            .background(colors.bottomNavBackground)
-            .border(width = 0.5.dp, color = colors.outlineVariant, shape = RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
-            .clip(RoundedCornerShape(topStart = 24.dp, topEnd = 24.dp))
-            .navigationBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 8.dp)
+    Surface(
+        color = colors.bottomNavBackground,
+        shadowElevation = 0.dp,
+        tonalElevation = 0.dp,
+        modifier = modifier.fillMaxWidth()
     ) {
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceAround,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            PixelNavTab.entries.forEach { tab ->
-                val isSelected = tab == selectedTab
-                val scale by animateFloatAsState(
-                    targetValue = if (isSelected) 1.05f else 1.0f,
-                    animationSpec = PixelMotion.BouncySpring,
-                    label = "tabScale_${tab.name}"
-                )
+        Column(modifier = Modifier.fillMaxWidth()) {
+            // Subtle 0.5dp top border separating nav from content
+            HorizontalDivider(
+                thickness = 0.5.dp,
+                color = colors.outlineVariant
+            )
 
-                Column(
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                    modifier = Modifier
-                        .scale(scale)
-                        .clip(RoundedCornerShape(16.dp))
-                        .clickable(
-                            interactionSource = remember { MutableInteractionSource() },
-                            indication = null
-                        ) {
-                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                            onTabSelected(tab)
-                        }
-                        .padding(horizontal = 10.dp, vertical = 4.dp)
-                ) {
-                    // Google Pixel Expressive Squircle Pill Indicator
-                    Box(
-                        contentAlignment = Alignment.Center,
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 8.dp, vertical = 6.dp),
+                horizontalArrangement = Arrangement.SpaceAround,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                PixelNavTab.entries.forEach { tab ->
+                    val isSelected = tab == selectedTab
+                    val scale by animateFloatAsState(
+                        targetValue = if (isSelected) 1.05f else 1.0f,
+                        animationSpec = PixelMotion.BouncySpring,
+                        label = "tabScale_${tab.name}"
+                    )
+
+                    Column(
+                        horizontalAlignment = Alignment.CenterHorizontally,
                         modifier = Modifier
-                            .width(52.dp)
-                            .height(30.dp)
-                            .clip(RoundedCornerShape(15.dp))
-                            .background(if (isSelected) colors.activePillBackground else Color.Transparent)
+                            .scale(scale)
+                            .clip(RoundedCornerShape(16.dp))
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) {
+                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                                onTabSelected(tab)
+                            }
+                            .padding(horizontal = 10.dp, vertical = 4.dp)
                     ) {
-                        Icon(
-                            imageVector = tab.icon,
-                            contentDescription = tab.label,
-                            tint = if (isSelected) colors.activePillText else colors.textSecondary,
-                            modifier = Modifier.size(20.dp)
+                        // Google Pixel Expressive Squircle Pill Indicator
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier
+                                .width(56.dp)
+                                .height(32.dp)
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(if (isSelected) colors.activePillBackground else Color.Transparent)
+                        ) {
+                            Icon(
+                                imageVector = tab.icon,
+                                contentDescription = tab.label,
+                                tint = if (isSelected) colors.activePillText else colors.textSecondary,
+                                modifier = Modifier.size(20.dp)
+                            )
+                        }
+
+                        Spacer(modifier = Modifier.height(3.dp))
+
+                        Text(
+                            text = tab.label,
+                            fontSize = 11.sp,
+                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                            color = if (isSelected) colors.textPrimary else colors.textTertiary
                         )
                     }
-
-                    Spacer(modifier = Modifier.height(4.dp))
-
-                    Text(
-                        text = tab.label,
-                        fontSize = 11.sp,
-                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                        color = if (isSelected) colors.textPrimary else colors.textTertiary
-                    )
                 }
             }
         }

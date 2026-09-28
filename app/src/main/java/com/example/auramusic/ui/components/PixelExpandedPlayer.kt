@@ -18,6 +18,10 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.defaultMinSize
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -102,13 +106,16 @@ fun PixelExpandedPlayer(
         modifier = modifier
             .fillMaxSize()
             .background(MonochromeBlack)
-            .padding(horizontal = 24.dp, vertical = 16.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.SpaceBetween
+            .statusBarsPadding()
+            .navigationBarsPadding()
+            .padding(horizontal = 24.dp, vertical = 10.dp),
+        horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        // 1. Top Bar: Collapse Icon, Mode Title, Options
+        // 1. Top Bar: Collapse Icon, Mode Title & Album, Equalizer, Options
         Row(
-            modifier = Modifier.fillMaxWidth(),
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(48.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
@@ -124,7 +131,12 @@ fun PixelExpandedPlayer(
                 )
             }
 
-            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Column(
+                horizontalAlignment = Alignment.CenterHorizontally,
+                modifier = Modifier
+                    .weight(1f)
+                    .padding(horizontal = 8.dp)
+            ) {
                 Text(
                     text = "PLAYING FROM ALBUM",
                     fontSize = 10.sp,
@@ -175,28 +187,28 @@ fun PixelExpandedPlayer(
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.weight(0.25f).defaultMinSize(minHeight = 8.dp))
 
-        // 2. Hero Pixel Squircle Album Artwork with Spinning Vinyl Grooves
+        // 2. Hero Pixel Squircle Album Artwork
         Box(
             modifier = Modifier
-                .fillMaxWidth(0.88f)
-                .weight(1f, fill = false),
+                .weight(1.5f)
+                .fillMaxWidth(0.88f),
             contentAlignment = Alignment.Center
         ) {
             PixelSquircleAlbumArt(
                 coverArtUrl = track.coverArtUrl,
                 isPlaying = playerState.isPlaying,
-                cornerRadius = 32.dp,
+                cornerRadius = 28.dp,
                 showVinylGrooves = false,
                 titleFallback = track.title,
-                modifier = Modifier.fillMaxWidth()
+                modifier = Modifier.fillMaxSize()
             )
         }
 
-        Spacer(modifier = Modifier.height(20.dp))
+        Spacer(modifier = Modifier.weight(0.35f).defaultMinSize(minHeight = 14.dp))
 
-        // 3. Track Details Row (Title, Artist, Heart Favorite)
+        // 3. Track Details Row (Title, Artist, Badges, Heart Favorite)
         Row(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.SpaceBetween,
@@ -205,23 +217,23 @@ fun PixelExpandedPlayer(
             Column(modifier = Modifier.weight(1f)) {
                 Text(
                     text = track.title,
-                    fontSize = 22.sp,
+                    fontSize = 21.sp,
                     fontWeight = FontWeight.Bold,
                     color = MonochromeWhite,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
-                Spacer(modifier = Modifier.height(4.dp))
+                Spacer(modifier = Modifier.height(3.dp))
+                Text(
+                    text = track.artist,
+                    fontSize = 14.sp,
+                    fontWeight = FontWeight.Normal,
+                    color = MonochromeSilver,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
+                )
+                Spacer(modifier = Modifier.height(6.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = track.artist,
-                        fontSize = 15.sp,
-                        fontWeight = FontWeight.Normal,
-                        color = MonochromeSilver,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    Spacer(modifier = Modifier.width(8.dp))
                     Box(
                         modifier = Modifier
                             .clip(RoundedCornerShape(6.dp))
@@ -262,11 +274,14 @@ fun PixelExpandedPlayer(
                 }
             }
 
+            Spacer(modifier = Modifier.width(12.dp))
+
             IconButton(
                 onClick = {
                     haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
                     onToggleFavorite()
-                }
+                },
+                modifier = Modifier.size(44.dp)
             ) {
                 Icon(
                     imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
@@ -277,7 +292,7 @@ fun PixelExpandedPlayer(
             }
         }
 
-        Spacer(modifier = Modifier.height(14.dp))
+        Spacer(modifier = Modifier.height(16.dp))
 
         // 4. Pixel Dynamic Squiggly Wavy Seekbar with Travel Buffer
         PixelSquigglySeekbar(
@@ -288,6 +303,8 @@ fun PixelExpandedPlayer(
             activeColor = MonochromeWhite,
             inactiveColor = MonochromeOutline
         )
+
+        Spacer(modifier = Modifier.height(4.dp))
 
         // Time labels: Current and Duration
         Row(
@@ -308,7 +325,7 @@ fun PixelExpandedPlayer(
             )
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(14.dp))
 
         // 5. Main Pixel Playback Controls
         Row(
@@ -321,7 +338,8 @@ fun PixelExpandedPlayer(
                 onClick = {
                     haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
                     onToggleShuffle()
-                }
+                },
+                modifier = Modifier.size(40.dp)
             ) {
                 Icon(
                     imageVector = Icons.Default.Shuffle,
@@ -351,9 +369,9 @@ fun PixelExpandedPlayer(
             Box(
                 contentAlignment = Alignment.Center,
                 modifier = Modifier
-                    .size(68.dp)
+                    .size(72.dp)
                     .scale(playScale)
-                    .clip(RoundedCornerShape(22.dp))
+                    .clip(RoundedCornerShape(24.dp))
                     .background(MonochromeWhite)
                     .clickable(
                         interactionSource = playInteractionSource,
@@ -367,7 +385,7 @@ fun PixelExpandedPlayer(
                     imageVector = if (playerState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
                     contentDescription = if (playerState.isPlaying) "Pause" else "Play",
                     tint = MonochromeBlack,
-                    modifier = Modifier.size(34.dp)
+                    modifier = Modifier.size(36.dp)
                 )
             }
 
@@ -392,7 +410,8 @@ fun PixelExpandedPlayer(
                 onClick = {
                     haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
                     onToggleRepeat()
-                }
+                },
+                modifier = Modifier.size(40.dp)
             ) {
                 Icon(
                     imageVector = if (playerState.isRepeatOne) Icons.Default.RepeatOne else Icons.Default.Repeat,
@@ -403,7 +422,7 @@ fun PixelExpandedPlayer(
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(18.dp))
 
         // 6. Bottom Auxiliary Bar: Speed pill, Audio device pill, Queue
         Row(
@@ -487,5 +506,7 @@ fun PixelExpandedPlayer(
                 )
             }
         }
+
+        Spacer(modifier = Modifier.height(4.dp))
     }
 }
