@@ -11,9 +11,12 @@ import com.example.auramusic.model.Playlist
 import com.example.auramusic.model.RecommendationSection
 import com.example.auramusic.model.Track
 import com.example.auramusic.network.NetworkQualityObserver
+import com.example.auramusic.network.OnlineMusicSearchService
 import com.example.auramusic.player.MusicPlayerManager
 import com.example.auramusic.player.PlayerState
 import com.example.auramusic.recommendation.RecommendationEngine
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -29,6 +32,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     private val networkObserver = NetworkQualityObserver(application)
     private val playlistRepository = PlaylistRepository(application, audioRepository)
     private val recommendationEngine = RecommendationEngine(audioRepository)
+    private val onlineSearchService = OnlineMusicSearchService()
 
     val playerState: StateFlow<PlayerState> = playerManager.playerState
     val networkStatus = networkObserver.networkStatus
@@ -39,6 +43,14 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
+
+    private val _isSearchingOnline = MutableStateFlow(false)
+    val isSearchingOnline: StateFlow<Boolean> = _isSearchingOnline.asStateFlow()
+
+    private val _onlineSearchTracks = MutableStateFlow<List<Track>>(emptyList())
+    private val _onlineSearchAlbums = MutableStateFlow<List<Album>>(emptyList())
+
+    private var searchJob: Job? = null
 
     private val _selectedCategory = MutableStateFlow("All Tracks")
     val selectedCategory: StateFlow<String> = _selectedCategory.asStateFlow()
@@ -82,57 +94,57 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         "Device Library"
     )
 
-    // Filtered Tracks based on category, search query, or playlist
+    // Filtered Tracks: combines local catalog + live online search results from Spotify & YouTube Music
     val filteredTracks: StateFlow<List<Track>> = combine(
         _allTracks,
+        _onlineSearchTracks,
         _searchQuery,
         _selectedCategory
-    ) { tracks, query, category ->
-        tracks.filter { track ->
-            val matchesCategory = when (category) {
-                "All Tracks", "Recommendations", "Albums", "My Playlists" -> true
-                else -> track.category.equals(category, ignoreCase = true) ||
-                        track.source.displayName.equals(category, ignoreCase = true)
-            }
-
-            val matchesQuery = if (query.isBlank()) {
-                true
-            } else {
+    ) { localTracks, onlineTracks, query, category ->
+        if (query.isNotBlank()) {
+            val localMatches = localTracks.filter { track ->
                 track.title.contains(query, ignoreCase = true) ||
-                        track.artist.contains(query, ignoreCase = true) ||
-                        track.album.contains(query, ignoreCase = true) ||
-                        track.qualityBadge.contains(query, ignoreCase = true)
+                track.artist.contains(query, ignoreCase = true) ||
+                track.album.contains(query, ignoreCase = true) ||
+                track.qualityBadge.contains(query, ignoreCase = true)
             }
-
-            matchesCategory && matchesQuery
+            (localMatches + onlineTracks).distinctBy { "${it.title.lowercase().trim()}_${it.artist.lowercase().trim()}" }
+        } else {
+            localTracks.filter { track ->
+                when (category) {
+                    "All Tracks", "Recommendations", "Albums", "My Playlists" -> true
+                    else -> track.category.equals(category, ignoreCase = true) ||
+                            track.source.displayName.equals(category, ignoreCase = true)
+                }
+            }
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // Filtered Albums matching search or category
+    // Filtered Albums: combines local albums + live online search results from Spotify & YouTube Music
     val filteredAlbums: StateFlow<List<Album>> = combine(
         _allAlbums,
+        _onlineSearchAlbums,
         _searchQuery,
         _selectedCategory
-    ) { albums, query, category ->
-        albums.filter { album ->
-            val matchesCategory = when (category) {
-                "All Tracks", "Recommendations", "Albums" -> true
-                "Spotify" -> album.source.displayName.contains("Spotify", ignoreCase = true)
-                "YouTube Music" -> album.source.displayName.contains("YouTube", ignoreCase = true)
-                "Lossless FLAC" -> album.isLossless
-                else -> true
-            }
-
-            val matchesQuery = if (query.isBlank()) {
-                true
-            } else {
+    ) { localAlbums, onlineAlbums, query, category ->
+        if (query.isNotBlank()) {
+            val localMatches = localAlbums.filter { album ->
                 album.title.contains(query, ignoreCase = true) ||
-                        album.artist.contains(query, ignoreCase = true) ||
-                        album.qualityBadge.contains(query, ignoreCase = true) ||
-                        album.source.displayName.contains(query, ignoreCase = true)
+                album.artist.contains(query, ignoreCase = true) ||
+                album.qualityBadge.contains(query, ignoreCase = true) ||
+                album.source.displayName.contains(query, ignoreCase = true)
             }
-
-            matchesCategory && matchesQuery
+            (localMatches + onlineAlbums).distinctBy { "${it.title.lowercase().trim()}_${it.artist.lowercase().trim()}" }
+        } else {
+            localAlbums.filter { album ->
+                when (category) {
+                    "All Tracks", "Recommendations", "Albums" -> true
+                    "Spotify" -> album.source.displayName.contains("Spotify", ignoreCase = true)
+                    "YouTube Music" -> album.source.displayName.contains("YouTube", ignoreCase = true)
+                    "Lossless FLAC" -> album.isLossless
+                    else -> true
+                }
+            }
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
@@ -265,25 +277,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         openAlbum(album)
     }
 
-    // Player Controls
-    fun togglePlayPause() = playerManager.togglePlayPause()
-
-    fun skipNext() = playerManager.skipNext()
-
-    fun skipPrevious() = playerManager.skipPrevious()
-
-    fun seekToRatio(ratio: Float) = playerManager.seekToRatio(ratio)
-
-    fun toggleShuffle() = playerManager.toggleShuffle()
-
-    fun toggleRepeat() = playerManager.toggleRepeat()
-
-    fun toggleTravelMode() = playerManager.toggleTravelMode()
-
-    fun setBitrateMode(mode: AudioBitrateMode) = playerManager.setBitrateMode(mode)
-
-    fun setPlaybackSpeed(speed: Float) = playerManager.setPlaybackSpeed(speed)
-
+    // Navigation and Search
     fun setNavTab(tab: com.example.auramusic.ui.components.PixelNavTab) {
         _currentTab.value = tab
         when (tab) {
@@ -308,10 +302,57 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
 
     fun setSearchQuery(query: String) {
         _searchQuery.value = query
-        if (query.isNotBlank() && _currentTab.value != com.example.auramusic.ui.components.PixelNavTab.SEARCH) {
-            _currentTab.value = com.example.auramusic.ui.components.PixelNavTab.SEARCH
+        searchJob?.cancel()
+
+        if (query.isNotBlank()) {
+            if (_currentTab.value != com.example.auramusic.ui.components.PixelNavTab.SEARCH) {
+                _currentTab.value = com.example.auramusic.ui.components.PixelNavTab.SEARCH
+            }
+
+            if (query.trim().length >= 2) {
+                searchJob = viewModelScope.launch {
+                    delay(350)
+                    _isSearchingOnline.value = true
+                    try {
+                        val result = onlineSearchService.searchOnline(query.trim())
+                        _onlineSearchTracks.value = result.tracks
+                        _onlineSearchAlbums.value = result.albums
+                    } catch (e: Exception) {
+                        // ignore network error
+                    } finally {
+                        _isSearchingOnline.value = false
+                    }
+                }
+            } else {
+                _onlineSearchTracks.value = emptyList()
+                _onlineSearchAlbums.value = emptyList()
+                _isSearchingOnline.value = false
+            }
+        } else {
+            _onlineSearchTracks.value = emptyList()
+            _onlineSearchAlbums.value = emptyList()
+            _isSearchingOnline.value = false
         }
     }
+
+    // Player Controls
+    fun togglePlayPause() = playerManager.togglePlayPause()
+
+    fun skipNext() = playerManager.skipNext()
+
+    fun skipPrevious() = playerManager.skipPrevious()
+
+    fun seekToRatio(ratio: Float) = playerManager.seekToRatio(ratio)
+
+    fun toggleShuffle() = playerManager.toggleShuffle()
+
+    fun toggleRepeat() = playerManager.toggleRepeat()
+
+    fun toggleTravelMode() = playerManager.toggleTravelMode()
+
+    fun setBitrateMode(mode: AudioBitrateMode) = playerManager.setBitrateMode(mode)
+
+    fun setPlaybackSpeed(speed: Float) = playerManager.setPlaybackSpeed(speed)
 
     fun setExpandedPlayer(expanded: Boolean) {
         _isExpandedPlayer.value = expanded
@@ -323,6 +364,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
 
     override fun onCleared() {
         super.onCleared()
+        searchJob?.cancel()
         playerManager.release()
     }
 }

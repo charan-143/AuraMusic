@@ -86,6 +86,7 @@ fun MainScreen(
     val playerState by viewModel.playerState.collectAsStateWithLifecycle()
     val currentTab by viewModel.currentTab.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
+    val isSearchingOnline by viewModel.isSearchingOnline.collectAsStateWithLifecycle()
     val selectedCategory by viewModel.selectedCategory.collectAsStateWithLifecycle()
     val tracks by viewModel.filteredTracks.collectAsStateWithLifecycle()
     val filteredAlbums by viewModel.filteredAlbums.collectAsStateWithLifecycle()
@@ -293,6 +294,33 @@ fun MainScreen(
             ) {
                 // 1. SEARCH ACTIVE OR SEARCH TAB
                 if (searchQuery.isNotBlank() || currentTab == PixelNavTab.SEARCH) {
+                    if (isSearchingOnline) {
+                        item {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(12.dp))
+                                    .background(MonochromeSurfaceContainer)
+                                    .padding(horizontal = 14.dp, vertical = 8.dp)
+                            ) {
+                                Box(
+                                    modifier = Modifier
+                                        .size(8.dp)
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(MonochromeWhite)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "Searching online Spotify & YouTube Music...",
+                                    fontSize = 11.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    color = MonochromeWhite
+                                )
+                            }
+                        }
+                    }
+
                     if (filteredAlbums.isNotEmpty()) {
                         item {
                             Text(
@@ -318,25 +346,50 @@ fun MainScreen(
                         }
                     }
 
-                    item {
-                        Text(
-                            text = "MATCHING SONGS (${tracks.size})",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 1.1.sp,
-                            color = MonochromeSilver
-                        )
-                    }
+                    if (tracks.isNotEmpty()) {
+                        item {
+                            Text(
+                                text = "MATCHING SONGS (${tracks.size})",
+                                fontSize = 10.sp,
+                                fontWeight = FontWeight.Bold,
+                                letterSpacing = 1.1.sp,
+                                color = MonochromeSilver
+                            )
+                        }
 
-                    items(tracks) { track ->
-                        val isSelected = playerState.currentTrack?.id == track.id
-                        PixelTrackTile(
-                            track = track,
-                            isSelected = isSelected,
-                            isPlaying = playerState.isPlaying,
-                            onClick = { viewModel.playTrack(track) },
-                            onMoreClick = { viewModel.openAddToPlaylist(track) }
-                        )
+                        items(tracks) { track ->
+                            val isSelected = playerState.currentTrack?.id == track.id
+                            PixelTrackTile(
+                                track = track,
+                                isSelected = isSelected,
+                                isPlaying = playerState.isPlaying,
+                                onClick = { viewModel.playTrack(track) },
+                                onMoreClick = { viewModel.openAddToPlaylist(track) }
+                            )
+                        }
+                    } else if (!isSearchingOnline && searchQuery.isNotBlank() && filteredAlbums.isEmpty()) {
+                        item {
+                            Column(
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 32.dp)
+                            ) {
+                                Text(
+                                    text = "No results found for \"$searchQuery\"",
+                                    fontSize = 14.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MonochromeWhite
+                                )
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "Try searching an artist (e.g. Coldplay, The Weeknd, Drake), song title, or album.",
+                                    fontSize = 12.sp,
+                                    color = MonochromeSilver,
+                                    modifier = Modifier.padding(horizontal = 24.dp)
+                                )
+                            }
+                        }
                     }
                 }
                 // 2. FOR YOU / RECOMMENDATIONS TAB
