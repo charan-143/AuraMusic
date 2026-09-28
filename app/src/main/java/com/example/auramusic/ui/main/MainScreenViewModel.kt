@@ -14,9 +14,11 @@ import com.example.auramusic.model.Track
 import com.example.auramusic.network.NetworkQualityObserver
 import com.example.auramusic.network.OnlineMusicSearchService
 import com.example.auramusic.player.MusicPlayerManager
+import com.example.auramusic.player.PlaybackProgress
 import com.example.auramusic.player.PlayerState
 import com.example.auramusic.recommendation.RecommendationEngine
 import com.example.auramusic.ui.components.PixelNavTab
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -26,6 +28,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class MainScreenViewModel(application: Application) : AndroidViewModel(application) {
 
@@ -39,6 +42,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     private val onlineSearchService = OnlineMusicSearchService()
 
     val playerState: StateFlow<PlayerState> = playerManager.playerState
+    val playbackProgress: StateFlow<PlaybackProgress> = playerManager.playbackProgress
     val networkStatus = networkObserver.networkStatus
     val playlists: StateFlow<List<Playlist>> = playlistRepository.playlists
     val favoriteTrackIds: StateFlow<Set<String>> = playlistRepository.favoriteTrackIds
@@ -353,32 +357,40 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    private fun refreshRecommendations(track: Track?) {
-        val mood = _selectedCategory.value
-        val rawSections = recommendationEngine.getOnlineRecommendationSections(
-            activeTrack = track,
-            providedTracks = _allTracks.value,
-            providedAlbums = _allAlbums.value
-        )
+    private var recommendationJob: Job? = null
 
-        _recommendations.value = if (mood.isNotBlank() && mood != "All Tracks" && mood != "All Recommendations" && mood != "All" && mood != "My Playlists" && mood != "Albums") {
-            val moodTracks = recommendationEngine.getTracksForMoodChip(mood, _allTracks.value)
-            if (moodTracks.isNotEmpty()) {
-                listOf(
-                    RecommendationSection(
-                        id = "rec_mood_${mood.lowercase().replace(" ", "_")}",
-                        title = "$mood Curation",
-                        subtitle = "Harmonically tuned algorithmic flow matching your $mood vibe",
-                        source = track?.source ?: com.example.auramusic.model.StreamingSource.SPOTIFY,
-                        albums = emptyList(),
-                        tracks = moodTracks.take(8)
-                    )
-                ) + rawSections
+    private fun refreshRecommendations(track: Track?) {
+        recommendationJob?.cancel()
+        recommendationJob = viewModelScope.launch(Dispatchers.Default) {
+            val mood = _selectedCategory.value
+            val tracksPool = _allTracks.value
+            val albumsPool = _allAlbums.value
+            val rawSections = recommendationEngine.getOnlineRecommendationSections(
+                activeTrack = track,
+                providedTracks = tracksPool,
+                providedAlbums = albumsPool
+            )
+
+            val updatedSections = if (mood.isNotBlank() && mood != "All Tracks" && mood != "All Recommendations" && mood != "All" && mood != "My Playlists" && mood != "Albums") {
+                val moodTracks = recommendationEngine.getTracksForMoodChip(mood, tracksPool)
+                if (moodTracks.isNotEmpty()) {
+                    listOf(
+                        RecommendationSection(
+                            id = "rec_mood_${mood.lowercase().replace(" ", "_")}",
+                            title = "$mood Curation",
+                            subtitle = "Harmonically tuned algorithmic flow matching your $mood vibe",
+                            source = track?.source ?: com.example.auramusic.model.StreamingSource.SPOTIFY,
+                            albums = emptyList(),
+                            tracks = moodTracks.take(8)
+                        )
+                    ) + rawSections
+                } else {
+                    rawSections
+                }
             } else {
                 rawSections
             }
-        } else {
-            rawSections
+            _recommendations.value = updatedSections
         }
     }
 
@@ -387,10 +399,14 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
      * and immediately begins playback.
      */
     fun startTrackRadio(seedTrack: Track) {
-        val pool = _allTracks.value.ifEmpty { audioRepository.getMultiSourceTracks() }
-        val radioQueue = recommendationEngine.generateRadioQueue(seedTrack, pool, count = 15)
-        playerManager.setQueue(radioQueue, 0)
-        playerManager.playTrack(seedTrack, radioQueue)
+        viewModelScope.launch(Dispatchers.Default) {
+            val pool = _allTracks.value.ifEmpty { audioRepository.getMultiSourceTracks() }
+            val radioQueue = recommendationEngine.generateRadioQueue(seedTrack, pool, count = 15)
+            withContext(Dispatchers.Main) {
+                playerManager.setQueue(radioQueue, 0)
+                playerManager.playTrack(seedTrack, radioQueue)
+            }
+        }
     }
 
     // Playback and Selection

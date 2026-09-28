@@ -64,7 +64,9 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.tween
 import androidx.compose.material.icons.filled.Mic
+import androidx.compose.runtime.collectAsState
 import com.example.auramusic.model.TrackLyrics
+import com.example.auramusic.player.PlaybackProgress
 import com.example.auramusic.player.PlayerState
 import com.example.auramusic.theme.MonochromeBlack
 import com.example.auramusic.theme.MonochromeLightGrey
@@ -77,10 +79,12 @@ import com.example.auramusic.theme.MonochromeSurfaceContainer
 import com.example.auramusic.theme.MonochromeSurfaceHighest
 import com.example.auramusic.theme.MonochromeWhite
 import com.example.auramusic.theme.PixelMotion
+import kotlinx.coroutines.flow.StateFlow
 
 @Composable
 fun PixelExpandedPlayer(
     playerState: PlayerState,
+    playbackProgressFlow: StateFlow<PlaybackProgress>? = null,
     isFavorite: Boolean = false,
     onToggleFavorite: () -> Unit = {},
     onPlayPauseClick: () -> Unit,
@@ -282,9 +286,10 @@ fun PixelExpandedPlayer(
                 label = "lyricsViewCrossfade"
             ) { active ->
                 if (active) {
-                    PixelSyncedLyricsView(
+                    PixelExpandedLyricsSection(
+                        playbackProgressFlow = playbackProgressFlow,
+                        fallbackPositionMs = playerState.currentPositionMs,
                         lyrics = lyrics,
-                        currentPositionMs = playerState.currentPositionMs,
                         onSeekToTimestamp = onSeekToTimestamp,
                         onSwitchToAlbumArt = onToggleLyrics,
                         modifier = Modifier.fillMaxSize()
@@ -404,35 +409,12 @@ fun PixelExpandedPlayer(
         Spacer(modifier = Modifier.height(16.dp))
 
         // 4. Pixel Dynamic Squiggly Wavy Seekbar with Travel Buffer
-        PixelSquigglySeekbar(
-            progress = playerState.progress,
-            bufferedProgress = playerState.bufferedProgress,
+        PixelExpandedSeekbarSection(
+            playbackProgressFlow = playbackProgressFlow,
+            fallbackPlayerState = playerState,
             isPlaying = playerState.isPlaying,
-            onSeek = onSeek,
-            activeColor = MonochromeWhite,
-            inactiveColor = MonochromeOutline
+            onSeek = onSeek
         )
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        // Time labels: Current and Duration
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(
-                text = playerState.formattedCurrentPosition,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
-                color = MonochromeSilver
-            )
-            Text(
-                text = playerState.formattedDuration,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
-                color = MonochromeSilver
-            )
-        }
 
         Spacer(modifier = Modifier.height(14.dp))
 
@@ -616,4 +598,69 @@ fun PixelExpandedPlayer(
 
         Spacer(modifier = Modifier.height(4.dp))
     }
+}
+
+@Composable
+private fun PixelExpandedSeekbarSection(
+    playbackProgressFlow: StateFlow<PlaybackProgress>?,
+    fallbackPlayerState: PlayerState,
+    isPlaying: Boolean,
+    onSeek: (Float) -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val progressState = playbackProgressFlow?.collectAsState()?.value
+    val progress = progressState?.progress ?: fallbackPlayerState.progress
+    val buffered = progressState?.bufferedProgress ?: fallbackPlayerState.bufferedProgress
+    val currentFormatted = progressState?.formattedCurrentPosition ?: fallbackPlayerState.formattedCurrentPosition
+    val durationFormatted = progressState?.formattedDuration ?: fallbackPlayerState.formattedDuration
+
+    Column(modifier = modifier.fillMaxWidth()) {
+        PixelSquigglySeekbar(
+            progress = progress,
+            bufferedProgress = buffered,
+            isPlaying = isPlaying,
+            onSeek = onSeek,
+            activeColor = MonochromeWhite,
+            inactiveColor = MonochromeOutline
+        )
+
+        Spacer(modifier = Modifier.height(4.dp))
+
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Text(
+                text = currentFormatted,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                color = MonochromeSilver
+            )
+            Text(
+                text = durationFormatted,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.Medium,
+                color = MonochromeSilver
+            )
+        }
+    }
+}
+
+@Composable
+private fun PixelExpandedLyricsSection(
+    playbackProgressFlow: StateFlow<PlaybackProgress>?,
+    fallbackPositionMs: Long,
+    lyrics: TrackLyrics?,
+    onSeekToTimestamp: (Long) -> Unit,
+    onSwitchToAlbumArt: () -> Unit,
+    modifier: Modifier = Modifier
+) {
+    val currentPos = playbackProgressFlow?.collectAsState()?.value?.currentPositionMs ?: fallbackPositionMs
+    PixelSyncedLyricsView(
+        lyrics = lyrics,
+        currentPositionMs = currentPos,
+        onSeekToTimestamp = onSeekToTimestamp,
+        onSwitchToAlbumArt = onSwitchToAlbumArt,
+        modifier = modifier
+    )
 }

@@ -47,7 +47,7 @@ import com.example.auramusic.theme.PixelTheme
 fun PixelMiniPlayer(
     track: Track,
     isPlaying: Boolean,
-    progress: Float,
+    progress: Float = 0f,
     onPlayPauseClick: () -> Unit,
     onSkipNextClick: () -> Unit,
     onExpandClick: () -> Unit,

@@ -1720,7 +1720,6 @@ fun MainScreen(
                     PixelMiniPlayer(
                         track = track,
                         isPlaying = playerState.isPlaying,
-                        progress = playerState.progress,
                         onPlayPauseClick = { viewModel.togglePlayPause() },
                         onSkipNextClick = { viewModel.skipNext() },
                         onExpandClick = { viewModel.setExpandedPlayer(true) }
@@ -1771,6 +1770,7 @@ fun MainScreen(
             ) {
                 PixelExpandedPlayer(
                     playerState = playerState,
+                    playbackProgressFlow = viewModel.playbackProgress,
                     isFavorite = playerState.currentTrack?.let { favoriteTrackIds.contains(it.id) } == true,
                     onToggleFavorite = { playerState.currentTrack?.let { viewModel.toggleFavorite(it) } },
                     onPlayPauseClick = { viewModel.togglePlayPause() },
