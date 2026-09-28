@@ -50,6 +50,9 @@ class MusicPlayerManager(private val context: Context) {
     private val scope = CoroutineScope(Dispatchers.Main + Job())
     private var positionTickerJob: Job? = null
 
+    private val _playerState = MutableStateFlow(PlayerState())
+    val playerState: StateFlow<PlayerState> = _playerState.asStateFlow()
+
     val cacheManager by lazy { AdaptiveAudioCacheManager(context) }
     val equalizerManager by lazy { EqualizerManager(context) }
 
@@ -177,6 +180,12 @@ class MusicPlayerManager(private val context: Context) {
             // safe fallback
         }
         detectAudioOutputDevice()
+        try {
+            // Eagerly activate MediaSession for Android Quick Settings media controls
+            val dummyToken = mediaSession.token
+        } catch (e: Exception) {
+            // safe fallback
+        }
 
         scope.launch {
             equalizerManager.state.collect { eqState ->
@@ -196,9 +205,6 @@ class MusicPlayerManager(private val context: Context) {
             }
         }
     }
-
-    private val _playerState = MutableStateFlow(PlayerState())
-    val playerState: StateFlow<PlayerState> = _playerState.asStateFlow()
 
     fun setQueue(tracks: List<Track>, initialIndex: Int = 0) {
         if (tracks.isEmpty()) return
@@ -265,10 +271,12 @@ class MusicPlayerManager(private val context: Context) {
             } catch (e: Exception) {
                 // Fallback to simulated playback ticker if stream error occurs
                 startTicker()
+                startMediaPlaybackService()
             }
         } else {
             // Simulated local playback progression with exact audio timings
             startTicker()
+            startMediaPlaybackService()
         }
     }
 
