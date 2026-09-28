@@ -26,6 +26,7 @@ This document provides a record of all features, architectural milestones, UI/UX
 | **FEAT-029** | Auto Audio Streaming Quality Switching on Signal Fluctuation | Audio Engine & Network ABR | `COMPLETE` | Motorola Edge 50 Pro | 2026-09-28 |
 | **FEAT-030** | Dual-Mode Audio Equalizer (AI-Assisted & Manual Graphic) | Audio DSP & UI | `COMPLETE` | Motorola Edge 50 Pro | 2026-09-28 |
 | **FEAT-031** | Full-Length Online Music Engine, Home Recommendations & Rich Search Discovery | Audio Streaming & UI | `COMPLETE` | Motorola Edge 50 Pro | 2026-09-28 |
+| **FEAT-032** | Bottom-Attached Flush Navigation Bar & Expanded Player Geometry Fix | UI/UX & Layout Architecture | `COMPLETE` | Motorola Edge 50 Pro | 2026-09-28 |
 
 ---
 
@@ -727,6 +728,38 @@ This document provides a record of all features, architectural milestones, UI/UX
     - `aura_search_tab.png`: Search tab with `TRENDING SEARCHES` pills and `BROWSE GENRES & MOODS` squircle grid.
     - `aura_believer_search.png`: Tapping `Believer` loaded 12 matching albums and 4 full-length songs.
     - `aura_playback_test.png` & `aura_expanded_player.png`: Verified playback at 1:17 / 4:12 on track *Vaaroon Forever*, confirming full-length audio streaming past the 30-second mark.
+
+---
+
+### [FEAT-032] Bottom-Attached Flush Navigation Bar & Expanded Player Geometry Fix
+- **Date**: 2026-09-28
+- **Category**: UI/UX & Layout Architecture
+- **Author/Agent**: Antigravity AI
+- **Files Affected**:
+  - `app/src/main/java/com/example/auramusic/ui/components/PixelBottomNavBar.kt`
+  - `app/src/main/java/com/example/auramusic/ui/components/PixelExpandedPlayer.kt`
+- **Description**:
+  Addressed the design and layout feedback concerning bottom navigation card styling and expanded music player alignment:
+  1. **Bottom Navigation Bar Attached Flush with Zero Shadows**:
+     - Converted `PixelBottomNavBar` from a floating card design (with rounded top corners, margins, and borders) to an edge-to-edge `Surface` attached flush to the screen's bottom boundary.
+     - Stripped all elevation and shadows (`shadowElevation = 0.dp`, `tonalElevation = 0.dp`).
+     - Added a clean 0.5dp `HorizontalDivider` at the top boundary for a crisp boundary.
+     - Handled system navigation bar insets cleanly with `navigationBarsPadding()` so tabs float ergonomically above system gesture bars.
+  2. **Expanded Music Player Geometry & Alignment Overhaul**:
+     - Identified root cause of misalignment: root `Column` used `Arrangement.SpaceBetween` combined with `Modifier.weight(fill = false)` on children, creating conflicting negative spacing calculations in Compose that pushed the album artwork up over the top bar and caused title/artist text separation across giant voids.
+     - Added `statusBarsPadding()` and `navigationBarsPadding()` to prevent UI clipping by the camera cutout and system navigation bars.
+     - Structured deterministic top-to-bottom layout:
+       - 48dp Top Bar with collapse chevron, centered "PLAYING FROM ALBUM" and album name, Equalizer button, and options button.
+       - Proportional squircle album art centered within weighted bounds with strict 1:1 aspect ratio constraint.
+       - Unified Track Info row with 21sp bold title, 14sp artist, quality bitrate badge, and interactive equalizer profile pill, aligned with the heart favorite button.
+       - Pixel dynamic squiggly wavy seekbar with precise time readouts.
+       - Transport control row with 72dp bouncy squircle play/pause button, previous/next, shuffle, and repeat.
+       - Bottom auxiliary row with speed chip, active audio device pill, and queue sheet button.
+- **Verification**:
+  - Built and installed on Motorola Edge 50 Pro (`ZD222MKB8C`).
+  - Screen captures verified on device:
+    - `aura_home_nav_attached.png`: Bottom navigation tabs attached flush to the bottom edge, full width, zero shadows, no floating card curves.
+    - `aura_expanded_player_verified.png`: Expanded player showing *Tera Mera Rishta* with perfect alignment, zero text overlapping the album artwork, status bar clearance, and balanced control spacing.
 
 ---
 
