@@ -90,12 +90,18 @@ fun PixelSquircleAlbumArt(
             .border(1.dp, MonochromeOutline, RoundedCornerShape(cornerRadius))
     ) {
         if (!coverArtUrl.isNullOrBlank()) {
+            val imageRequest = remember(coverArtUrl) {
+                ImageRequest.Builder(context)
+                    .data(coverArtUrl)
+                    .crossfade(150)
+                    .allowHardware(true)
+                    .memoryCacheKey(coverArtUrl)
+                    .diskCacheKey(coverArtUrl)
+                    .build()
+            }
             // Full color, high-definition thumbnail image without grayscale filters
             AsyncImage(
-                model = ImageRequest.Builder(context)
-                    .data(coverArtUrl)
-                    .crossfade(true)
-                    .build(),
+                model = imageRequest,
                 contentDescription = "Song Thumbnail Artwork",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
