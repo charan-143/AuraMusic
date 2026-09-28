@@ -374,6 +374,26 @@ This document provides a record of all features, architectural milestones, UI/UX
 
 ---
 
+### [FEAT-022] Google Pixel Bottom Navigation Tabs (Home, For You, Search, Library)
+- **Date**: 2026-09-28
+- **Category**: UI Component / Navigation
+- **Status**: COMPLETE
+- **Files Affected**:
+  - `app/src/main/java/com/example/auramusic/ui/components/PixelBottomNavBar.kt`
+  - `app/src/main/java/com/example/auramusic/ui/main/MainScreen.kt`
+  - `app/src/main/java/com/example/auramusic/ui/main/MainScreenViewModel.kt`
+  - `preview.html`
+- **Description**:
+  Implemented Google Pixel Material 3 Expressive Monochrome bottom navigation tabs down:
+  - 4 core tabs: **Home**, **For You** (Recommendations), **Search** (Explore), and **Library** (Playlists & Custom Albums).
+  - Signature M3 Expressive squircle active pill (`52.dp` x `30.dp`, `15.dp` corners) with spring bounce animation (`PixelMotion.BouncySpring`).
+  - Haptic feedback tick on tab switch (`LocalHapticFeedback`).
+  - Elevated floating Pixel Mini Player positioned cleanly above the bottom tabs (`padding(bottom = 68.dp)`) preventing UI overlap.
+  - Bottom scroll clearance (`contentPadding = 150.dp`) ensuring the final tracks in any list remain completely accessible.
+- **Verification**: Built and verified in Android unit tests; deployed and tested live on Motorola Edge 50 Pro.
+
+---
+
 ## 3. Change Tracking Guidelines for New Features
 
 When adding or modifying features in the future, append an entry following this format:
