@@ -39,58 +39,38 @@ class LyricsService {
         val coreTitle = extractCoreTitle(cleanTitle)
 
         try {
-            // 1. Check built-in verified karaoke sync bank first if title matches core hits
+            // 1. Check built-in verified karaoke sync bank first (instant 0ms response)
             val preloaded = getVerifiedBankLyrics(track, cleanTitle)
             if (preloaded != null) {
                 lyricsCache[cacheKey] = preloaded
                 return@withContext preloaded
             }
 
-            // 2. Try LRCLIB exact get endpoint (sanitized title + artist + duration)
-            val exactLyrics = fetchExactLrclibLyrics(track, cleanTitle, cleanArtist)
-            if (exactLyrics != null && exactLyrics.isSynced && exactLyrics.hasLines) {
-                lyricsCache[cacheKey] = exactLyrics
-                return@withContext exactLyrics
+            // 2. High-yield single search on LRCLIB: returns up to 20 candidate tracks
+            // Scored in-memory by synced status, artist match, title match, and duration
+            val searchCandidate = searchLrclibLyrics(track, cleanTitle)
+            if (searchCandidate != null && searchCandidate.hasLines) {
+                lyricsCache[cacheKey] = searchCandidate
+                return@withContext searchCandidate
             }
 
-            // 3. Search LRCLIB: Tier 1 (Clean Title + Primary Artist)
-            val searchTier1 = searchLrclibLyrics(track, "$cleanTitle $cleanArtist")
-            if (searchTier1 != null && searchTier1.isSynced && searchTier1.hasLines) {
-                lyricsCache[cacheKey] = searchTier1
-                return@withContext searchTier1
-            }
-
-            // 4. Search LRCLIB: Tier 2 (Clean Title alone - highly effective for Bollywood / Indian / single-name hits)
-            val searchTier2 = searchLrclibLyrics(track, cleanTitle)
-            if (searchTier2 != null && searchTier2.isSynced && searchTier2.hasLines) {
-                lyricsCache[cacheKey] = searchTier2
-                return@withContext searchTier2
-            }
-
-            // 5. Search LRCLIB: Tier 3 (Core Title without dashes, e.g. "Tera Mera Rishta")
+            // 3. If coreTitle differs from cleanTitle, try coreTitle as fallback
             if (coreTitle.isNotBlank() && !coreTitle.equals(cleanTitle, ignoreCase = true)) {
-                val searchTier3 = searchLrclibLyrics(track, coreTitle)
-                if (searchTier3 != null && searchTier3.isSynced && searchTier3.hasLines) {
-                    lyricsCache[cacheKey] = searchTier3
-                    return@withContext searchTier3
+                val coreCandidate = searchLrclibLyrics(track, coreTitle)
+                if (coreCandidate != null && coreCandidate.hasLines) {
+                    lyricsCache[cacheKey] = coreCandidate
+                    return@withContext coreCandidate
                 }
             }
 
-            // 6. If plain lyrics were found in searchTier1 or searchTier2, use weighted cadence sync
-            val plainCandidate = searchTier1 ?: searchTier2
-            if (plainCandidate != null && plainCandidate.hasLines) {
-                lyricsCache[cacheKey] = plainCandidate
-                return@withContext plainCandidate
-            }
-
-            // 7. Try JioSaavn official lyrics endpoint for Indian / regional tracks
+            // 4. Try JioSaavn official lyrics endpoint
             val saavnLyrics = fetchSaavnLyrics(track, cleanTitle)
             if (saavnLyrics != null && saavnLyrics.hasLines) {
                 lyricsCache[cacheKey] = saavnLyrics
                 return@withContext saavnLyrics
             }
 
-            // 8. Fallback to comprehensive acoustic soundscape
+            // 5. If no authentic lyrics exist anywhere, return clean empty lyrics (no fake acoustic text)
             val fallbackLyrics = getFallbackLyricsForTrack(track)
             lyricsCache[cacheKey] = fallbackLyrics
             fallbackLyrics
@@ -100,14 +80,6 @@ class LyricsService {
             lyricsCache[cacheKey] = fallback
             fallback
         }
-    }
-
-    private fun fetchExactLrclibLyrics(track: Track, cleanTitle: String, cleanArtist: String): TrackLyrics? {
-        val durationSec = (track.durationMs / 1000).toInt().coerceAtLeast(30)
-        val urlString = "$LRCLIB_GET_URL?artist_name=${encode(cleanArtist)}&track_name=${encode(cleanTitle)}&duration=$durationSec"
-        val json = makeHttpRequest(urlString) ?: return null
-
-        return parseLrclibJson(track, json)
     }
 
     private fun searchLrclibLyrics(track: Track, query: String): TrackLyrics? {
@@ -122,17 +94,18 @@ class LyricsService {
             if (jsonArray.length() == 0) return null
 
             val cleanTitle = sanitizeTitle(track.title)
+            val cleanArtist = sanitizeArtist(track.artist).lowercase()
             val targetDurationSec = (track.durationMs / 1000).toInt()
 
-            // Best matching candidate scoring
             var bestCandidate: JSONObject? = null
             var bestScore = -1
 
-            for (i in 0 until minOf(jsonArray.length(), 15)) {
+            for (i in 0 until minOf(jsonArray.length(), 20)) {
                 val item = jsonArray.optJSONObject(i) ?: continue
                 val synced = item.optString("syncedLyrics", "").trim()
                 val plain = item.optString("plainLyrics", "").trim()
-                val name = item.optString("name", "")
+                val trackName = item.optString("trackName", item.optString("name", ""))
+                val artistName = item.optString("artistName", "").trim()
                 val duration = item.optDouble("duration", 0.0).toInt()
 
                 if (synced.isBlank() && plain.isBlank()) continue
@@ -141,6 +114,15 @@ class LyricsService {
                 if (synced.isNotBlank()) score += 1000
                 if (plain.isNotBlank()) score += 100
 
+                // Artist matching bonus
+                if (cleanArtist.isNotBlank() && artistName.isNotBlank()) {
+                    val candidateArtistLower = artistName.lowercase()
+                    val artistTokens = cleanArtist.split(" ", ",", "&", "/", "-").filter { it.length > 2 }
+                    if (artistTokens.any { candidateArtistLower.contains(it) }) {
+                        score += 350
+                    }
+                }
+
                 // Duration delta scoring
                 if (targetDurationSec > 0 && duration > 0) {
                     val delta = abs(duration - targetDurationSec)
@@ -148,12 +130,12 @@ class LyricsService {
                         delta <= 3 -> score += 400
                         delta <= 8 -> score += 250
                         delta <= 15 -> score += 100
-                        delta > 45 -> score -= 300 // Probably different radio edit or version
+                        delta > 45 -> score -= 300 // Possible different radio edit or mix
                     }
                 }
 
                 // Title exact/close match
-                val cleanItemName = sanitizeTitle(name)
+                val cleanItemName = sanitizeTitle(trackName)
                 if (cleanItemName.equals(cleanTitle, ignoreCase = true)) {
                     score += 300
                 } else if (cleanItemName.contains(cleanTitle, ignoreCase = true) || cleanTitle.contains(cleanItemName, ignoreCase = true)) {
@@ -173,16 +155,7 @@ class LyricsService {
         }
     }
 
-    private fun parseLrclibJson(track: Track, jsonString: String): TrackLyrics? {
-        return try {
-            val obj = JSONObject(jsonString)
-            parseLrclibJsonObject(track, obj)
-        } catch (e: Exception) {
-            null
-        }
-    }
-
-    private fun parseLrclibJsonObject(track: Track, obj: JSONObject): TrackLyrics {
+    private fun parseLrclibJsonObject(track: Track, obj: JSONObject): TrackLyrics? {
         val synced = obj.optString("syncedLyrics", "").trim()
         val plain = obj.optString("plainLyrics", "").trim()
 
@@ -203,18 +176,20 @@ class LyricsService {
 
         if (plain.isNotBlank()) {
             val generatedLines = createSyncedLinesFromPlainText(plain, track.durationMs)
-            return TrackLyrics(
-                trackId = track.id,
-                title = track.title,
-                artist = track.artist,
-                isSynced = true,
-                lines = generatedLines,
-                plainLyrics = plain,
-                source = "Dynamic Cadence Sync"
-            )
+            if (generatedLines.isNotEmpty()) {
+                return TrackLyrics(
+                    trackId = track.id,
+                    title = track.title,
+                    artist = track.artist,
+                    isSynced = true,
+                    lines = generatedLines,
+                    plainLyrics = plain,
+                    source = "Dynamic Cadence Sync"
+                )
+            }
         }
 
-        return getFallbackLyricsForTrack(track)
+        return null
     }
 
     /**
@@ -664,6 +639,166 @@ class LyricsService {
                 [01:50.51] You know I love you so
             """.trimIndent()
 
+            titleLower.contains("tum ho wahi") -> """
+                [00:12.50] Tum ho wahi, tum ho wahi, tum ho wahi
+                [00:17.80] Jisko kabhi khona nahi
+                [00:23.20] Tum ho wahi, tum ho wahi, tum ho wahi
+                [00:28.50] Tum ho wahi ho
+                [00:32.10] You are the one for me
+                [00:36.40] Ho tum ho wahi
+                [00:39.80] Ho you are the one for me
+                [00:44.20] Kaisa ye shama hai dekho to zara
+                [00:48.80] Kisi naye jaadu se bhara
+                [00:53.40] Ho tujhko na pata ho to main doon bata
+                [00:58.20] Tune ye jaadu hai kiya
+                [01:03.50] O thoda sa hoon mera
+                [01:07.80] Baaki main hoon tera
+                [01:12.40] Chalna hai aage ab tere hi saath
+                [01:17.20] Haathon mein leke tera haath
+                [01:21.80] Tum ho wahi, tum ho wahi, tum ho wahi
+                [01:27.20] Jisko kabhi khona nahi
+                [01:32.40] Tum ho wahi, tum ho wahi, tum ho wahi
+                [01:37.60] Tum ho wahi ho
+                [01:41.20] You are the one for me
+                [01:45.50] Ho tum ho wahi
+                [01:49.00] Ho you are the one for me
+            """.trimIndent()
+
+            titleLower.contains("dil ibaadat") || titleLower.contains("dil ibadat") -> """
+                [00:15.28] Dil ibaadat kar raha hai
+                [00:18.15] Dhadkane meri sun
+                [00:21.02] Tujhko main kar loon haasil
+                [00:23.85] Lagi hai yahi dhun
+                [00:26.50] Zindagi ki shaakh se loon
+                [00:29.40] Kuch haseen pal main chun
+                [00:32.10] Tujhko main kar loon haasil
+                [00:34.90] Lagi hai yahi dhun
+                [00:37.80] Dil ibaadat kar raha hai
+                [00:40.50] Dhadkane meri sun
+                [00:43.20] Tujhko main kar loon haasil
+                [00:45.90] Lagi hai yahi dhun
+                [00:54.50] Jo bhi jitne pal jeeyoon, unhe tere sang jeeyoon
+                [01:01.20] Jo bhi kal ho ab mera, usse tere sang jeeyoon
+                [01:07.80] Jo bhi saansein main bharoon, unhe tere sang bharoon
+                [01:14.50] Chaahe jo ho raasta, usse tere sang chaloo
+                [01:21.80] Dil ibaadat kar raha hai
+                [01:24.50] Dhadkane meri sun
+                [01:27.20] Tujhko main kar loon haasil
+                [01:30.00] Lagi hai yahi dhun
+                [01:42.50] Mujhko de tu mit jaane, ab khud se de mil jaane
+                [01:48.80] Kyun hai yeh itna faasla
+                [01:54.20] Lamhe yeh phir na aane, inko tu na de jaane
+                [02:00.60] Tu mujhpe khud ko de lutaa
+                [02:06.50] Tujhe tujhse tod loon, kahin khud se jod loon
+                [02:13.20] Mere jism-o-jaan pe aa, teri khushboo odh loon
+                [02:22.00] Dil ibaadat kar raha hai, dhadkane meri sun
+                [02:27.50] Tujhko main kar loon haasil, lagi hai yahi dhun
+            """.trimIndent()
+
+            titleLower.contains("barbaad") -> """
+                [00:14.20] Tujhse door main ek hi wajah ke liye hoon
+                [00:19.80] Kamzor ho jaata hoon main
+                [00:24.50] Tujhse door main ek hi wajah ke liye hoon
+                [00:29.80] Aawaara ban jaata hoon main
+                [00:35.20] Tujhe chhoo loon toh kuch mujhe ho jaayega
+                [00:40.50] Jo main chahta na ho mujhko
+                [00:45.60] Tujhe mil ke yeh dil mera beh jaayega
+                [00:50.80] Isi baat ka darr hai mujhko
+                [00:55.50] Ke ho na jaaye pyaar tumse mujhe
+                [01:00.80] Kar dega barbaad ishq mujhe
+                [01:06.20] Ho na jaaye pyaar tumse mujhe
+                [01:11.40] Behad-beshumaar tumse, tumse
+                [01:21.80] Teri nazdikiyon mein kaisa khumaar hai
+                [01:27.20] Teri qurbat se mera dil kyun beqaraar hai
+                [01:32.50] Kyun yeh mit-ti nahin hai, kaisi yeh pyaas hai
+                [01:37.80] Jitna main door jaaun, utni hi tu paas hai
+                [01:43.00] Ke ho na jaaye pyaar tumse mujhe
+                [01:48.20] Kar dega barbaad ishq mujhe
+                [01:53.50] Ho na jaaye pyaar tumse mujhe
+                [01:58.80] Behad-beshumaar tumse
+            """.trimIndent()
+
+            titleLower.contains("arz kiya hai") -> """
+                [00:10.50] Kaayar jo the, vo shayar bane
+                [00:16.80] Ab kya kya karein ye ishq mein
+                [00:23.20] Na kehte the kuch jo, lage khoj mein
+                [00:29.80] Kya lafz chune?
+                [00:35.20] Naye aashiq ye, ishq mein tere hain faiz bane
+                [00:42.50] Arz kiya hai
+                [00:46.80] Humne bhi likha kuch tere baare mein
+                [00:53.20] Aise tu lage ki gulaab hai
+                [00:58.80] Aur aise tu lage ki gulaab hai
+                [01:04.20] Baghon mein dil ke, khilke in fizaaon mein chhaye ho haaye
+                [01:12.50] Aur vaise hum to tere hi gulaam hain
+                [01:18.00] Baadshah dil ke, teri baazi mein, jo tu chahe to
+                [01:28.50] Haathon ko sambhaale mere haathon mein
+                [01:35.20] Jab tak neend na aaye in lakeeron mein
+                [01:42.00] Baatein hon… haaye
+            """.trimIndent()
+
+            titleLower.contains("vaaroon") -> """
+                [00:12.80] Bandha nainon ne nainon se dora
+                [00:18.50] Mohe kheenche chala moh tora
+                [00:24.20] Tohe saunpa hai tan mann ye kora
+                [00:30.00] Mohe thaame tu rakhna sada
+                [00:36.50] Vaaroon, vaaroon main vaaroon tori
+                [00:42.20] Ab na jag ki hai parvaah koi
+                [00:48.00] Thaam le tu mori jindagi
+                [00:53.80] Tohse badh ke na koi khushi
+                [01:00.20] Vaaroon, vaaroon main vaaroon tori
+                [01:06.00] Aaj saunpe hai sapne sabhi
+                [01:11.80] Naina tore tijori mori
+                [01:17.50] Hai mori...
+                [01:24.00] Pheeka pheeka tha manwa ye mora
+                [01:29.80] Chhoo ke toone bhara rang tora
+                [01:35.50] Mele jaisa saja hai ye angana
+                [01:41.20] Tohre aane se dil ka mora
+            """.trimIndent()
+
+            titleLower.contains("casa tupka") -> """
+                [00:08.50] Imma shake yo world imma break it down
+                [00:12.80] Teekha eyeliner lemme fix that crown
+                [00:17.20] Juuls on my body gold and brown, now bow down
+                [00:22.00] Mera nasha chadhe sir pe hai zehreela
+                [00:26.50] Imma spin your head jaise tequila
+                [00:31.00] Vision so bright ye na dekh pa re
+                [00:35.50] Gold waist chain maare lashkaare
+                [00:40.00] Ain't no gold digger chaubis carat soul meri
+                [00:44.80] Dil hue chori sab ke international robbery
+                [00:49.20] Casa casa casa casa casa tupka tequila
+                [00:53.80] Casa casa casa casa casa tupka tequila
+                [00:58.50] Party karni party pehle yo yo bulao
+                [01:03.00] Police toh agayi ab aunty bulao
+                [01:07.50] Party all nighter kambal uthao
+                [01:12.00] Bada hot hai weather jab baje reggaeto
+                [01:16.80] Lemme take you baby girl chalo mexico
+                [01:21.50] Casa casa casa casa casa tupka tequila
+            """.trimIndent()
+
+            titleLower.contains("parvati") -> """
+                [00:08.20] Shambhu, Shiv Shambhu, Bholenath...
+                [00:15.50] Jab zid pe aa gayi Parvati
+                [00:22.80] Bhole ko paane nikal padi
+                [00:30.00] Tap ki aag mein jal ke dekha
+                [00:37.50] Har bandhan ko chhod diya
+                [00:45.00] Shiv ki lagan mein magan huyi
+                [00:52.20] Man mein basaya Bholenath
+                [00:59.80] Om Namah Shivaya gunje man mein
+                [01:07.50] Shiv Parvati ka pavitra sangam
+                [01:15.00] Shambhu, Shiv Shambhu, Bholenath...
+            """.trimIndent()
+
+            titleLower.contains("afsaana") || titleLower.contains("afsana") -> """
+                [00:12.00] Afsaana banaaya aapne
+                [00:17.50] Dil mein bithaaya aapne
+                [00:23.00] Khwabon ko sajeela kar diya
+                [00:28.50] Jab se gale lagaaya aapne
+                [00:34.20] Yeh kaisa nasha hai chhaane laga
+                [00:40.00] Har pal tera naam aane laga
+                [00:45.80] Afsaana banaaya aapne
+                [00:51.50] Dil mein bithaaya aapne
+            """.trimIndent()
+
             titleLower.contains("interstellar") || titleLower.contains("zimmer") -> """
                 [00:00.00] ✦ Interstellar Theme — Hans Zimmer ✦
                 [00:12.00] ✦ Ambient cosmic resonance echoes through space ✦
@@ -696,27 +831,18 @@ class LyricsService {
     }
 
     /**
-     * Fallback for instrumental or unknown tracks with smooth rhythmic acoustic milestones.
+     * Fallback when no authentic lyrics exist anywhere.
+     * Never fabricates fake acoustic text as lyrics.
      */
     private fun getFallbackLyricsForTrack(track: Track): TrackLyrics {
-        val dur = track.durationMs.coerceAtLeast(90000L)
-        val step = dur / 6
-        val genericLines = listOf(
-            LyricLine(0L, "✦ ${track.title} ✦"),
-            LyricLine(step, "✦ ${track.artist} • ${track.qualityBadge} ✦"),
-            LyricLine(step * 2, "✦ Rhythmic melody playing in studio fidelity ✦"),
-            LyricLine(step * 3, "✦ Dynamic lossless soundscape unfolding ✦"),
-            LyricLine(step * 4, "✦ Harmonized bass & acoustic resonance ✦"),
-            LyricLine(step * 5, "✦ Culmination of the audio performance ✦")
-        )
-
         return TrackLyrics(
             trackId = track.id,
             title = track.title,
             artist = track.artist,
-            isSynced = true,
-            lines = genericLines,
-            source = "Aura Synced Acoustic Engine"
+            isSynced = false,
+            lines = emptyList(),
+            plainLyrics = "",
+            source = "Lyrics Unavailable"
         )
     }
 }

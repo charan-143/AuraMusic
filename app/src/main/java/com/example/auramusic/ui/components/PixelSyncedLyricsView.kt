@@ -100,6 +100,7 @@ fun PixelSyncedLyricsView(
     }
 
     val badgeText = when {
+        lines.isEmpty() -> "INSTRUMENTAL / NO LYRICS"
         lyrics?.source?.contains("LRCLIB", ignoreCase = true) == true -> "LIVE KARAOKE SYNC"
         lyrics?.source?.contains("Bank", ignoreCase = true) == true -> "VERIFIED KARAOKE SYNC"
         lyrics?.source?.contains("Saavn", ignoreCase = true) == true -> "STUDIO VOCAL SYNC"
@@ -227,14 +228,14 @@ fun PixelSyncedLyricsView(
                         )
                         Spacer(modifier = Modifier.height(12.dp))
                         Text(
-                            text = "✦ Instrumental Soundscape ✦",
+                            text = "✦ Original Lyrics Not Available ✦",
                             fontSize = 15.sp,
                             fontWeight = FontWeight.Bold,
                             color = MonochromeWhite
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Enjoy the high-fidelity acoustic performance",
+                            text = "High-fidelity lossless playback active",
                             fontSize = 12.sp,
                             color = MonochromeSilver
                         )
