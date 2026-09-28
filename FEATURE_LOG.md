@@ -900,7 +900,13 @@ This document provides a record of all features, architectural milestones, UI/UX
      - Added runtime `POST_NOTIFICATIONS` check in `MainActivity.kt` for Android 13+ devices.
      - Clean lifecycle handling: service starts on playback, automatically releases session on destruction, and stops when task is removed and playback is paused.
 - **Verification**:
-  - Successfully compiled via `./gradlew.bat compileDebugKotlin` and verified APK assembly with `./gradlew.bat assembleDebug` (Build Successful in 1m 14s).
+  - Resolved `NullPointerException` during init by ordering state flow declarations before instance initialization.
+  - Bound `Notification.MediaStyle` with `sessionCompatToken.token as PlatformMediaSession.Token` and compact actions (Previous, Play/Pause, Next).
+  - Integrated dynamic Coil artwork bitmap streaming to `Notification.Builder.setLargeIcon` for real-time album art backdrops in the notification header.
+  - Successfully verified live on physical **Motorola edge 50 pro** (`ZD222MKB8C`):
+    - App docks directly into Android's native Quick Settings Media Carousel ("Shree Hanuman Chalisa", "Hariharan...", wavy seekbar, "This phone" output pill, Prev/Pause/Next buttons).
+    - Absorbs notification out of the standard shade list into the system player.
+    - Verified background audio playback and OS media button control continuity.
 
 ---
 
