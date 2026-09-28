@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -78,11 +79,21 @@ fun PixelAlbumCard(
                     .background(colors.surfaceContainer)
                     .border(0.5.dp, colors.outlineVariant, RoundedCornerShape(20.dp))
             ) {
+                val context = androidx.compose.ui.platform.LocalContext.current
+                val imageRequest = remember(album.coverArtUrl) {
+                    coil.request.ImageRequest.Builder(context)
+                        .data(album.coverArtUrl)
+                        .crossfade(150)
+                        .allowHardware(true)
+                        .memoryCacheKey(album.coverArtUrl)
+                        .diskCacheKey(album.coverArtUrl)
+                        .build()
+                }
                 AsyncImage(
-                    model = album.coverArtUrl,
+                    model = imageRequest,
                     contentDescription = album.title,
                     contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxSize()
                 )
 
                 // Top Source Pill Badge
