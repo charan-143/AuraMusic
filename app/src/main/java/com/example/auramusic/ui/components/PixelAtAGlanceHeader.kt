@@ -1,6 +1,5 @@
 package com.example.auramusic.ui.components
 
-import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
@@ -22,18 +21,17 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CellTower
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Headphones
-import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
@@ -43,7 +41,6 @@ import com.example.auramusic.theme.MonochromeLightGrey
 import com.example.auramusic.theme.MonochromeMuted
 import com.example.auramusic.theme.MonochromeOutline
 import com.example.auramusic.theme.MonochromeSilver
-import com.example.auramusic.theme.MonochromeSurface
 import com.example.auramusic.theme.MonochromeSurfaceContainer
 import com.example.auramusic.theme.MonochromeWhite
 import java.text.SimpleDateFormat
@@ -55,7 +52,10 @@ fun PixelAtAGlanceHeader(
     modifier: Modifier = Modifier,
     isPlaying: Boolean = false,
     activeTrackTitle: String? = null,
-    onSettingsClick: () -> Unit = {}
+    networkStatusText: String = "5G Lossless Connected",
+    qualityBadge: String = "24-BIT FLAC",
+    isTravelMode: Boolean = true,
+    onTravelModeToggle: () -> Unit = {}
 ) {
     val haptic = LocalHapticFeedback.current
     val dateFormat = SimpleDateFormat("EEEE, MMM d", Locale.getDefault())
@@ -114,38 +114,72 @@ fun PixelAtAGlanceHeader(
                 }
             }
 
-            // Right: Pixel Buds / Output Device Pill
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(percent = 50))
-                    .background(MonochromeSurfaceContainer)
-                    .border(1.dp, MonochromeOutline, RoundedCornerShape(percent = 50))
-                    .clickable {
-                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                    }
-                    .padding(horizontal = 12.dp, vertical = 6.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Headphones,
-                    contentDescription = "Audio Output",
-                    tint = MonochromeWhite,
-                    modifier = Modifier.size(15.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = "Pixel Buds Pro",
-                    color = MonochromeLightGrey,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium
-                )
-                if (isPlaying) {
-                    Spacer(modifier = Modifier.width(5.dp))
+            // Right: Roaming / Travel Shield & Pixel Buds Output Pill
+            Column(horizontalAlignment = Alignment.End) {
+                // Audio Device Pill
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(percent = 50))
+                        .background(MonochromeSurfaceContainer)
+                        .border(1.dp, MonochromeOutline, RoundedCornerShape(percent = 50))
+                        .clickable {
+                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                        }
+                        .padding(horizontal = 10.dp, vertical = 5.dp)
+                ) {
                     Icon(
-                        imageVector = Icons.Default.GraphicEq,
-                        contentDescription = "Active EQ",
+                        imageVector = Icons.Default.Headphones,
+                        contentDescription = "Audio Output",
                         tint = MonochromeWhite,
                         modifier = Modifier.size(13.dp)
+                    )
+                    Spacer(modifier = Modifier.width(5.dp))
+                    Text(
+                        text = "Pixel Buds Pro",
+                        color = MonochromeLightGrey,
+                        fontSize = 11.sp,
+                        fontWeight = FontWeight.Medium
+                    )
+                    if (isPlaying) {
+                        Spacer(modifier = Modifier.width(4.dp))
+                        Icon(
+                            imageVector = Icons.Default.GraphicEq,
+                            contentDescription = "Active EQ",
+                            tint = MonochromeWhite,
+                            modifier = Modifier.size(11.dp)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(4.dp))
+
+                // Network & Travel Roaming Shield Pill
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(percent = 50))
+                        .background(MonochromeSurfaceContainer)
+                        .border(1.dp, MonochromeOutline, RoundedCornerShape(percent = 50))
+                        .clickable {
+                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                            onTravelModeToggle()
+                        }
+                        .padding(horizontal = 9.dp, vertical = 3.dp)
+                ) {
+                    Icon(
+                        imageVector = if (isTravelMode) Icons.Default.Shield else Icons.Default.CellTower,
+                        contentDescription = "Travel Shield",
+                        tint = MonochromeWhite,
+                        modifier = Modifier.size(11.dp)
+                    )
+                    Spacer(modifier = Modifier.width(4.dp))
+                    Text(
+                        text = if (isTravelMode) "TRAVEL BUFFER ON" else networkStatusText,
+                        color = MonochromeSilver,
+                        fontSize = 9.sp,
+                        fontWeight = FontWeight.Bold,
+                        letterSpacing = 0.5.sp
                     )
                 }
             }

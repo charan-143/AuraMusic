@@ -4,7 +4,9 @@ import android.app.Application
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.auramusic.data.AudioRepository
+import com.example.auramusic.model.AudioBitrateMode
 import com.example.auramusic.model.Track
+import com.example.auramusic.network.NetworkQualityObserver
 import com.example.auramusic.player.MusicPlayerManager
 import com.example.auramusic.player.PlayerState
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -19,8 +21,10 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
 
     private val audioRepository = AudioRepository(application)
     private val playerManager = MusicPlayerManager(application)
+    private val networkObserver = NetworkQualityObserver(application)
 
     val playerState: StateFlow<PlayerState> = playerManager.playerState
+    val networkStatus = networkObserver.networkStatus
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
@@ -36,7 +40,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     private val _isQueueVisible = MutableStateFlow(false)
     val isQueueVisible: StateFlow<Boolean> = _isQueueVisible.asStateFlow()
 
-    val categories = listOf("All Tracks", "Lofi Chill", "Deep Ambient", "Electronic", "Device Library")
+    val categories = listOf("All Tracks", "Lossless FLAC", "Spotify", "YouTube Music", "Device Library")
 
     val filteredTracks: StateFlow<List<Track>> = combine(
         _allTracks,
@@ -47,7 +51,8 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
             val matchesCategory = if (category == "All Tracks") {
                 true
             } else {
-                track.category.equals(category, ignoreCase = true)
+                track.category.equals(category, ignoreCase = true) ||
+                        track.source.displayName.equals(category, ignoreCase = true)
             }
 
             val matchesQuery = if (query.isBlank()) {
@@ -55,7 +60,8 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
             } else {
                 track.title.contains(query, ignoreCase = true) ||
                         track.artist.contains(query, ignoreCase = true) ||
-                        track.album.contains(query, ignoreCase = true)
+                        track.album.contains(query, ignoreCase = true) ||
+                        track.qualityBadge.contains(query, ignoreCase = true)
             }
 
             matchesCategory && matchesQuery
@@ -63,10 +69,17 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     init {
-        // Initialize with curated tracks
-        val curated = audioRepository.getCuratedTracks()
-        _allTracks.value = curated
-        playerManager.setQueue(curated, 0)
+        // Initialize multi-source tracks (Lossless, Spotify, YouTube Music)
+        val initialTracks = audioRepository.getMultiSourceTracks()
+        _allTracks.value = initialTracks
+        playerManager.setQueue(initialTracks, 0)
+
+        // Observe network changes to automatically adapt streaming buffers & roaming alerts
+        viewModelScope.launch {
+            networkObserver.networkStatus.collect { netStatus ->
+                playerManager.updateNetworkStatus(netStatus.statusText)
+            }
+        }
 
         // Try scanning device storage
         loadDeviceTracks()
@@ -76,7 +89,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         viewModelScope.launch {
             val deviceTracks = audioRepository.loadDeviceAudio()
             if (deviceTracks.isNotEmpty()) {
-                val combined = audioRepository.getCuratedTracks() + deviceTracks
+                val combined = audioRepository.getMultiSourceTracks() + deviceTracks
                 _allTracks.value = combined
                 playerManager.setQueue(combined, playerState.value.currentIndex)
             }
@@ -99,6 +112,10 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     fun toggleShuffle() = playerManager.toggleShuffle()
 
     fun toggleRepeat() = playerManager.toggleRepeat()
+
+    fun toggleTravelMode() = playerManager.toggleTravelMode()
+
+    fun setBitrateMode(mode: AudioBitrateMode) = playerManager.setBitrateMode(mode)
 
     fun setPlaybackSpeed(speed: Float) = playerManager.setPlaybackSpeed(speed)
 

@@ -65,10 +65,13 @@
       <!-- 1. Google Pixel At-a-Glance Header -->
       <div class="flex items-center justify-between py-2 border-b border-[#1c1c1c] pb-3 mb-3">
         <div>
-          <h1 id="glanceDate" class="text-xl font-bold text-white tracking-tight">Saturday, Sep 26</h1>
+          <div class="flex items-center space-x-2">
+            <h1 id="glanceDate" class="text-xl font-bold text-white tracking-tight">Saturday, Sep 26</h1>
+            <span id="travelShieldPill" class="px-2 py-0.5 bg-white/10 border border-white/20 rounded-full text-[9px] font-bold text-white tracking-wider uppercase">Travel Shield ON</span>
+          </div>
           <div class="flex items-center space-x-2 text-xs text-[#9e9e9e] mt-0.5">
-            <span id="ambientIndicatorDot" class="w-2 h-2 rounded-full bg-[#444] inline-block transition-colors"></span>
-            <span id="ambientSubtext">Monochrome Soundscape</span>
+            <span id="ambientIndicatorDot" class="w-2 h-2 rounded-full bg-white inline-block transition-colors"></span>
+            <span id="ambientSubtext">5G Roaming • 5m Pre-buffer Active</span>
           </div>
         </div>
         <div class="flex items-center space-x-1.5 px-3 py-1 bg-[#141414] border border-[#2b2b2b] squircle-pill text-[11px] font-medium text-[#d4d4d4]">
@@ -80,7 +83,7 @@
       <!-- 2. Pixel Squircle Search Bar -->
       <div class="bg-[#141414] border border-[#262626] rounded-2xl px-3.5 py-2.5 flex items-center space-x-2.5 mb-3">
         <svg class="w-4 h-4 text-[#888888] fill-current" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
-        <input id="searchInput" type="text" placeholder="Search monochrome tracks..." class="bg-transparent text-sm text-white placeholder-[#555555] outline-none w-full">
+        <input id="searchInput" type="text" placeholder="Search Spotify, YT Music & Lossless..." class="bg-transparent text-sm text-white placeholder-[#555555] outline-none w-full">
       </div>
 
       <!-- 3. Category Filter Chips -->
@@ -283,58 +286,74 @@
     // App State
     const tracks = [
       {
-        id: "curated_1",
-        title: "Midnight Monochrome",
+        id: "flac_lossless_master_1",
+        title: "Midnight Monochrome (Master)",
         artist: "Aura Sound Lab",
-        album: "Pixel Resonance Vol. 1",
+        album: "Pixel Resonance Lossless",
         durationMs: 214000,
         cover: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=400&auto=format&fit=crop&q=80",
-        category: "Lofi Chill",
+        category: "Lossless Master",
+        sourceBadge: "FLAC 24-bit 96kHz",
         freq: 220
       },
       {
-        id: "curated_2",
-        title: "Silent Pixel Drift",
+        id: "spotify_stream_1",
+        title: "Starboy • Spotify Stream",
+        artist: "The Weeknd",
+        album: "Starboy (Spotify 320k)",
+        durationMs: 230000,
+        cover: "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=400&auto=format&fit=crop&q=80",
+        category: "Spotify Hi-Fi",
+        sourceBadge: "Spotify 320kbps",
+        freq: 260
+      },
+      {
+        id: "ytmusic_stream_1",
+        title: "Blinding Lights • YouTube Music",
+        artist: "The Weeknd",
+        album: "After Hours (YT Opus)",
+        durationMs: 200000,
+        cover: "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=400&auto=format&fit=crop&q=80",
+        category: "YouTube Music",
+        sourceBadge: "YT Music Opus 256k",
+        freq: 310
+      },
+      {
+        id: "flac_lossless_master_2",
+        title: "Silent Pixel Drift (Audiophile)",
         artist: "Tensor Dreams",
-        album: "Material Echoes",
+        album: "Material Echoes Studio",
         durationMs: 186000,
         cover: "https://images.unsplash.com/photo-1550684848-fac1c5b4e853?w=400&auto=format&fit=crop&q=80",
-        category: "Deep Ambient",
+        category: "Lossless Master",
+        sourceBadge: "FLAC 1411kbps",
         freq: 174
       },
       {
-        id: "curated_3",
+        id: "spotify_stream_2",
         title: "OLED Dark Resonance",
         artist: "Noir Synth",
         album: "Pitch Black Horizons",
         durationMs: 242000,
         cover: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=400&auto=format&fit=crop&q=80",
-        category: "Electronic",
+        category: "Spotify Hi-Fi",
+        sourceBadge: "Spotify 320kbps",
         freq: 285
       },
       {
-        id: "curated_4",
+        id: "ytmusic_stream_2",
         title: "Spring Physics Walk",
         artist: "Kotlin Pulse",
         album: "Pixel Resonance Vol. 1",
         durationMs: 195000,
         cover: "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=400&auto=format&fit=crop&q=80",
-        category: "Lofi Chill",
+        category: "YouTube Music",
+        sourceBadge: "YT Music Opus 256k",
         freq: 396
-      },
-      {
-        id: "curated_5",
-        title: "Subtle Shadows",
-        artist: "Minimalist Echo",
-        album: "Material Echoes",
-        durationMs: 228000,
-        cover: "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?w=400&auto=format&fit=crop&q=80",
-        category: "Deep Ambient",
-        freq: 432
       }
     ];
 
-    const categories = ["All Tracks", "Lofi Chill", "Deep Ambient", "Electronic", "Device Library"];
+    const categories = ["All Tracks", "Lossless Master", "Spotify Hi-Fi", "YouTube Music", "Device Library"];
     let selectedCategory = "All Tracks";
     let currentTrackIndex = 0;
     let isPlaying = false;
@@ -403,7 +422,7 @@
             </div>
             <div class="flex-1 min-w-0">
               <div class="text-sm font-semibold truncate ${isSelected ? 'text-white font-bold' : 'text-[#e0e0e0]'}">${track.title}</div>
-              <div class="text-xs text-[#888] truncate">${track.artist} • ${formatTime(track.durationMs)}</div>
+              <div class="flex items-center space-x-1.5 mt-0.5"><span class="text-[9px] font-bold px-1.5 py-0.2 rounded bg-white/10 text-white border border-white/20">${track.sourceBadge || "Lossless"}</span><span class="text-xs text-[#888] truncate">${track.artist}</span></div>
             </div>
             <button onclick="event.stopPropagation(); toggleQueueSheet()" class="p-1.5 text-[#666] hover:text-white">
               <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M12 8c1.1 0 2-.9 2-2s-.9-2-2-2-2 .9-2 2 .9 2 2 2zm0 2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm0 6c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>

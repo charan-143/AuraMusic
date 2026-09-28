@@ -30,6 +30,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.unit.dp
 import com.example.auramusic.theme.MonochromeLightGrey
+import com.example.auramusic.theme.MonochromeMuted
 import com.example.auramusic.theme.MonochromeOutline
 import com.example.auramusic.theme.MonochromeWhite
 import kotlin.math.PI
@@ -38,11 +39,13 @@ import kotlin.math.sin
 @Composable
 fun PixelSquigglySeekbar(
     progress: Float, // 0f to 1f
+    bufferedProgress: Float = 0f, // 0f to 1f (Travel pre-buffering)
     isPlaying: Boolean,
     onSeek: (Float) -> Unit,
     modifier: Modifier = Modifier,
     activeColor: Color = MonochromeWhite,
-    inactiveColor: Color = MonochromeOutline
+    bufferColor: Color = Color(0xFF4A4A4A),
+    inactiveColor: Color = Color(0xFF222222)
 ) {
     val haptic = LocalHapticFeedback.current
     var isDragging by remember { mutableStateOf(false) }
@@ -50,7 +53,7 @@ fun PixelSquigglySeekbar(
 
     val effectiveProgress = if (isDragging) dragProgress else progress.coerceIn(0f, 1f)
 
-    // Smoothly animate wave amplitude between 0 (straight line when paused) and 5.5dp when playing
+    // Smoothly animate wave amplitude between 0 (straight line when paused) and 6.5dp when playing
     val targetAmplitude = if (isPlaying && !isDragging) 6.5f else 0f
     val animatedAmplitude by animateFloatAsState(
         targetValue = targetAmplitude,
@@ -107,20 +110,30 @@ fun PixelSquigglySeekbar(
             val width = size.width
             val centerY = size.height / 2f
             val playedWidth = width * effectiveProgress
+            val bufferedWidth = (width * bufferedProgress.coerceIn(effectiveProgress, 1f))
             val strokeWidthPx = 4.dp.toPx()
 
-            // 1. Draw inactive remainder track (straight line)
-            if (playedWidth < width) {
+            // 1. Draw base inactive track
+            drawLine(
+                color = inactiveColor,
+                start = Offset(0f, centerY),
+                end = Offset(width, centerY),
+                strokeWidth = strokeWidthPx,
+                cap = StrokeCap.Round
+            )
+
+            // 2. Draw travel offline pre-buffer line
+            if (bufferedWidth > playedWidth) {
                 drawLine(
-                    color = inactiveColor,
+                    color = bufferColor,
                     start = Offset(playedWidth, centerY),
-                    end = Offset(width, centerY),
+                    end = Offset(bufferedWidth, centerY),
                     strokeWidth = strokeWidthPx,
                     cap = StrokeCap.Round
                 )
             }
 
-            // 2. Draw dynamic squiggly wave for played portion
+            // 3. Draw dynamic squiggly wave for played portion
             if (playedWidth > 0f) {
                 val wavePath = Path()
                 wavePath.moveTo(0f, centerY)
@@ -146,7 +159,7 @@ fun PixelSquigglySeekbar(
                     )
                 )
 
-                // 3. Draw Pixel thumb circle at current played position
+                // 4. Draw Pixel thumb circle at current played position
                 val thumbY = if (animatedAmplitude > 0.1f) {
                     val angle = (2 * PI * (playedWidth / wavelengthPx) - wavePhase).toFloat()
                     centerY + animatedAmplitude * sin(angle)

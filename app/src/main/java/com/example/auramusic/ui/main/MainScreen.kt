@@ -91,10 +91,14 @@ fun MainScreen(
                 .fillMaxSize()
                 .statusBarsPadding()
         ) {
-            // 1. Google Pixel At-a-Glance Widget Header
+            // 1. Google Pixel At-a-Glance Widget Header with Travel Shield & Quality Badge
             PixelAtAGlanceHeader(
                 isPlaying = playerState.isPlaying,
-                activeTrackTitle = playerState.currentTrack?.title
+                activeTrackTitle = playerState.currentTrack?.title,
+                networkStatusText = playerState.networkStatusText,
+                qualityBadge = playerState.currentTrack?.qualityBadge ?: "24-BIT FLAC",
+                isTravelMode = playerState.isTravelModeEnabled,
+                onTravelModeToggle = { viewModel.toggleTravelMode() }
             )
 
             // 2. Pixel Styled Search Bar
@@ -121,7 +125,7 @@ fun MainScreen(
                     Box(modifier = Modifier.weight(1f)) {
                         if (searchQuery.isEmpty()) {
                             Text(
-                                text = "Search tracks, artists, ambient sounds...",
+                                text = "Search Lossless, Spotify, YouTube Music...",
                                 color = MonochromeMuted,
                                 fontSize = 14.sp
                             )
@@ -203,11 +207,30 @@ fun MainScreen(
                                 fontWeight = FontWeight.Bold,
                                 color = MonochromeWhite
                             )
-                            Text(
-                                text = "${currentTrack.artist} • ${currentTrack.album}",
-                                fontSize = 12.sp,
-                                color = MonochromeSilver
-                            )
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Text(
+                                    text = "${currentTrack.artist} • ${currentTrack.album}",
+                                    fontSize = 12.sp,
+                                    color = MonochromeSilver,
+                                    maxLines = 1,
+                                    modifier = Modifier.weight(1f, fill = false)
+                                )
+                                Spacer(modifier = Modifier.width(6.dp))
+                                Box(
+                                    modifier = Modifier
+                                        .clip(RoundedCornerShape(4.dp))
+                                        .background(MonochromeSurfaceContainer)
+                                        .border(0.5.dp, MonochromeOutlineVariant, RoundedCornerShape(4.dp))
+                                        .padding(horizontal = 4.dp, vertical = 1.dp)
+                                ) {
+                                    Text(
+                                        text = currentTrack.qualityBadge,
+                                        fontSize = 8.sp,
+                                        fontWeight = FontWeight.Bold,
+                                        color = MonochromeWhite
+                                    )
+                                }
+                            }
                         }
                         IconButton(
                             onClick = { viewModel.togglePlayPause() }
