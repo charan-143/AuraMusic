@@ -840,6 +840,39 @@ This document provides a record of all features, architectural milestones, UI/UX
 
 ---
 
+### [FEAT-035] Automatic Audio Output Route Detection & Settings Route Hub
+- **Date**: 2026-09-28
+- **Category**: Audio Engine & UI Architecture
+- **Status**: `COMPLETE`
+- **Files Affected**:
+  - `app/src/main/java/com/example/auramusic/player/MusicPlayerManager.kt`
+  - `app/src/main/java/com/example/auramusic/player/PlayerState.kt`
+  - `app/src/main/java/com/example/auramusic/ui/components/PixelAtAGlanceHeader.kt`
+  - `app/src/main/java/com/example/auramusic/ui/components/PixelAudioRouteSheet.kt`
+  - `app/src/main/java/com/example/auramusic/ui/components/PixelExpandedPlayer.kt`
+  - `app/src/main/java/com/example/auramusic/ui/main/MainScreen.kt`
+  - `app/src/main/java/com/example/auramusic/ui/main/MainScreenViewModel.kt`
+- **Description**:
+  1. **Automatic Audio Output Route Detection**:
+     - Integrated Android `AudioDeviceCallback` with system `AudioManager` in `MusicPlayerManager.kt`.
+     - Automatically monitors audio device connections and disconnections in real-time (`onAudioDevicesAdded`, `onAudioDevicesRemoved`).
+     - Prioritizes sinks in accordance with Android audio routing: Connected Bluetooth headphones/earbuds (A2DP, BLE, SCO) -> USB-C DAC / High-Res accessories -> 3.5mm Wired Headset/Headphones -> Built-in Phone Speaker.
+     - Automatically updates `PlayerState.activeAudioOutputDevice` and `PlayerState.activeAudioDeviceType` with zero user intervention.
+     - Clean lifecycle handling with callback registration in `init` and graceful unregistration in `release()`.
+  2. **Screen De-cluttering**:
+     - Removed the Audio Output Pill from `PixelAtAGlanceHeader.kt`, keeping top header clean across all screens (Home, Search, Library, Settings) with only the date/status and the quick theme mode switch (Sun/Moon).
+     - Removed the Audio Route pill from `PixelExpandedPlayer.kt` bottom control row, giving ideal breathing room to the Playback Speed Chip, Synced Lyrics Pill, and Queue Button.
+  3. **Dedicated Settings Audio Output Route Card**:
+     - Added a Google Pixel Material 3 Expressive Monochrome card in the **Settings Tab** (`PixelNavTab.SETTINGS`).
+     - Displays live detected device name, hardware type icon (`Bluetooth`, `Headphones`, or `Speaker`), and live status dot (`"Automatically Detected • Active"`).
+     - Displays badge status (`AUTO ROUTED` or `MANUAL`).
+     - Provides interactive "Switch Route" button opening `PixelAudioRouteSheet` and an "Auto Detect" refresh button to seamlessly restore dynamic tracking if manually overridden.
+     - Added an "Auto (System Route)" option directly in `PixelAudioRouteSheet` for one-tap switching back to auto-detection.
+- **Verification**:
+  - Successfully compiled via `./gradlew.bat compileDebugKotlin` and verified APK assembly with `./gradlew.bat assembleDebug` (Build Successful).
+
+---
+
 ## 3. Change Tracking Guidelines for New Features
 
 When adding or modifying features in the future, append an entry following this format:

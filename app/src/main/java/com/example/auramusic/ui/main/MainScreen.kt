@@ -42,6 +42,7 @@ import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Bedtime
+import androidx.compose.material.icons.filled.Bluetooth
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ClearAll
 import androidx.compose.material.icons.filled.Close
@@ -54,6 +55,7 @@ import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Speaker
 import androidx.compose.material.icons.filled.TravelExplore
 import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.CircularProgressIndicator
@@ -196,10 +198,8 @@ fun MainScreen(
                     qualityBadge = if (playerState.isAutoQualityEnabled) playerState.activeStreamingQualityBadge else (playerState.currentTrack?.qualityBadge ?: "24-BIT FLAC"),
                     isTravelMode = playerState.isTravelModeEnabled,
                     isDarkMode = isDarkMode,
-                    activeAudioDevice = playerState.activeAudioOutputDevice,
                     onTravelModeToggle = { viewModel.toggleTravelMode() },
-                    onThemeToggle = { viewModel.toggleThemeMode() },
-                    onAudioRouteClick = { viewModel.openAudioRouteSheet() }
+                    onThemeToggle = { viewModel.toggleThemeMode() }
                 )
 
                 // Main Screen Content Area with Expressive Fluid Tab Transitions
@@ -1406,8 +1406,17 @@ fun MainScreen(
                             }
                         }
 
-                        // Audio Output & Spatial Equalizer Card
+                        // Audio Output Route Management Card
                         item {
+                            val isAutoRoute = playerState.isAudioRouteAutoDetected
+                            val deviceType = playerState.activeAudioDeviceType
+                            val deviceIcon = when (deviceType) {
+                                "BLUETOOTH" -> Icons.Default.Bluetooth
+                                "WIRED" -> Icons.Default.Headphones
+                                "USB" -> Icons.Default.Headphones
+                                else -> Icons.Default.Speaker
+                            }
+
                             Box(
                                 modifier = Modifier
                                     .fillMaxWidth()
@@ -1422,54 +1431,155 @@ fun MainScreen(
                                         horizontalArrangement = Arrangement.SpaceBetween,
                                         modifier = Modifier.fillMaxWidth()
                                     ) {
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            Box(
-                                                contentAlignment = Alignment.Center,
-                                                modifier = Modifier
-                                                    .size(40.dp)
-                                                    .clip(RoundedCornerShape(12.dp))
-                                                    .background(colors.surfaceContainer)
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.GraphicEq,
-                                                    contentDescription = "Equalizer",
-                                                    tint = colors.textPrimary,
-                                                    modifier = Modifier.size(20.dp)
-                                                )
-                                            }
-                                            Spacer(modifier = Modifier.width(12.dp))
-                                            Column {
-                                                Text(
-                                                    text = "Equalizer & Spatial Audio",
-                                                    fontSize = 15.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = colors.textPrimary
-                                                )
-                                                Text(
-                                                    text = "Active: ${playerState.activeAudioOutputDevice}",
-                                                    fontSize = 12.sp,
-                                                    color = colors.textSecondary
-                                                )
-                                            }
+                                        Column(modifier = Modifier.weight(1f)) {
+                                            Text(
+                                                text = "Audio Output Route",
+                                                fontSize = 15.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = colors.textPrimary
+                                            )
+                                            Spacer(modifier = Modifier.height(2.dp))
+                                            Text(
+                                                text = "Real-time hardware route detection & playback sink",
+                                                fontSize = 12.sp,
+                                                color = colors.textSecondary
+                                            )
                                         }
 
                                         Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(50))
+                                                .background(if (isAutoRoute) colors.activePillBackground else colors.surfaceContainer)
+                                                .padding(horizontal = 10.dp, vertical = 5.dp)
+                                        ) {
+                                            Text(
+                                                text = if (isAutoRoute) "AUTO ROUTED" else "MANUAL",
+                                                fontSize = 9.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = if (isAutoRoute) colors.activePillText else colors.textTertiary
+                                            )
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(14.dp))
+
+                                    // Active Device Status Box
+                                    Box(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .clip(RoundedCornerShape(16.dp))
+                                            .background(colors.surfaceContainer)
+                                            .border(1.dp, colors.outlineVariant, RoundedCornerShape(16.dp))
+                                            .padding(14.dp)
+                                    ) {
+                                        Row(
+                                            verticalAlignment = Alignment.CenterVertically,
+                                            modifier = Modifier.fillMaxWidth()
+                                        ) {
+                                            Box(
+                                                contentAlignment = Alignment.Center,
+                                                modifier = Modifier
+                                                    .size(44.dp)
+                                                    .clip(RoundedCornerShape(14.dp))
+                                                    .background(colors.cardBackground)
+                                                    .border(1.dp, colors.outlineVariant, RoundedCornerShape(14.dp))
+                                            ) {
+                                                Icon(
+                                                    imageVector = deviceIcon,
+                                                    contentDescription = "Active Route",
+                                                    tint = colors.textPrimary,
+                                                    modifier = Modifier.size(22.dp)
+                                                )
+                                            }
+
+                                            Spacer(modifier = Modifier.width(14.dp))
+
+                                            Column(modifier = Modifier.weight(1f)) {
+                                                Text(
+                                                    text = playerState.activeAudioOutputDevice,
+                                                    fontSize = 15.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = colors.textPrimary,
+                                                    maxLines = 1,
+                                                    overflow = TextOverflow.Ellipsis
+                                                )
+                                                Spacer(modifier = Modifier.height(2.dp))
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .size(6.dp)
+                                                            .clip(CircleShape)
+                                                            .background(if (isAutoRoute) colors.textPrimary else colors.outline)
+                                                    )
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                    Text(
+                                                        text = if (isAutoRoute) "Automatically Detected • Active" else "Manual Selection • Active",
+                                                        fontSize = 11.sp,
+                                                        color = colors.textSecondary
+                                                    )
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.height(12.dp))
+
+                                    // Action Buttons Row
+                                    Row(
+                                        horizontalArrangement = Arrangement.spacedBy(10.dp),
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        // Configure / Switch Route Button
+                                        Box(
                                             contentAlignment = Alignment.Center,
                                             modifier = Modifier
-                                                .clip(RoundedCornerShape(16.dp))
+                                                .weight(1f)
+                                                .height(40.dp)
+                                                .clip(RoundedCornerShape(12.dp))
                                                 .background(colors.activePillBackground)
                                                 .clickable {
                                                     haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
                                                     viewModel.openAudioRouteSheet()
                                                 }
-                                                .padding(horizontal = 14.dp, vertical = 8.dp)
                                         ) {
                                             Text(
-                                                text = "Configure",
+                                                text = "Switch Route",
                                                 fontSize = 12.sp,
                                                 fontWeight = FontWeight.Bold,
                                                 color = colors.activePillText
                                             )
+                                        }
+
+                                        // Auto-Detect / Refresh Button
+                                        Box(
+                                            contentAlignment = Alignment.Center,
+                                            modifier = Modifier
+                                                .weight(1f)
+                                                .height(40.dp)
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(colors.surfaceContainer)
+                                                .border(1.dp, colors.outlineVariant, RoundedCornerShape(12.dp))
+                                                .clickable {
+                                                    haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                                                    viewModel.resetAudioOutputDeviceToAuto()
+                                                    Toast.makeText(context, "Audio route set to Auto-Detect", Toast.LENGTH_SHORT).show()
+                                                }
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Refresh,
+                                                    contentDescription = "Auto Detect",
+                                                    tint = colors.textPrimary,
+                                                    modifier = Modifier.size(14.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(6.dp))
+                                                Text(
+                                                    text = "Auto Detect",
+                                                    fontSize = 12.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = colors.textPrimary
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -1654,10 +1764,8 @@ fun MainScreen(
                     onSpeedChange = { viewModel.setPlaybackSpeed(it) },
                     onCollapseClick = { viewModel.setExpandedPlayer(false) },
                     onQueueClick = { viewModel.setQueueVisible(true) },
-                    onAudioRouteClick = { viewModel.openAudioRouteSheet() },
                     onMoreOptionsClick = { viewModel.openSleepTimerDialog() },
                     onEqualizerClick = { viewModel.openEqualizerSheet() },
-                    activeAudioDevice = playerState.activeAudioOutputDevice,
                     lyrics = currentTrackLyrics,
                     isLyricsActive = isLyricsViewActive,
                     onToggleLyrics = { viewModel.toggleLyricsView() },

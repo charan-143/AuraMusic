@@ -22,8 +22,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.DarkMode
-import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.Shield
 import androidx.compose.material3.Icon
@@ -52,10 +50,8 @@ fun PixelAtAGlanceHeader(
     qualityBadge: String = "24-BIT FLAC",
     isTravelMode: Boolean = true,
     isDarkMode: Boolean = true,
-    activeAudioDevice: String = "Pixel Buds",
     onTravelModeToggle: () -> Unit = {},
-    onThemeToggle: () -> Unit = {},
-    onAudioRouteClick: () -> Unit = {}
+    onThemeToggle: () -> Unit = {}
 ) {
     val haptic = LocalHapticFeedback.current
     val colors = PixelTheme.colors
@@ -136,45 +132,6 @@ fun PixelAtAGlanceHeader(
                         tint = colors.textPrimary,
                         modifier = Modifier.size(18.dp)
                     )
-                }
-
-                Spacer(modifier = Modifier.width(8.dp))
-
-                // Audio Output Pill
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(percent = 50))
-                        .background(colors.surfaceContainer)
-                        .border(1.dp, colors.outlineVariant, RoundedCornerShape(percent = 50))
-                        .clickable {
-                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                            onAudioRouteClick()
-                        }
-                        .padding(horizontal = 9.dp, vertical = 6.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Headphones,
-                        contentDescription = "Audio Output",
-                        tint = colors.textPrimary,
-                        modifier = Modifier.size(12.dp)
-                    )
-                    Spacer(modifier = Modifier.width(4.dp))
-                    Text(
-                        text = if (activeAudioDevice.length > 12) activeAudioDevice.take(10) + "…" else activeAudioDevice,
-                        color = colors.textSecondary,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Medium
-                    )
-                    if (isPlaying) {
-                        Spacer(modifier = Modifier.width(4.dp))
-                        Icon(
-                            imageVector = Icons.Default.GraphicEq,
-                            contentDescription = "Active EQ",
-                            tint = colors.textPrimary,
-                            modifier = Modifier.size(11.dp)
-                        )
-                    }
                 }
             }
         }

@@ -30,7 +30,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Pause
@@ -93,10 +92,8 @@ fun PixelExpandedPlayer(
     onSpeedChange: (Float) -> Unit,
     onCollapseClick: () -> Unit,
     onQueueClick: () -> Unit,
-    onAudioRouteClick: () -> Unit = {},
     onMoreOptionsClick: () -> Unit = {},
     onEqualizerClick: () -> Unit = {},
-    activeAudioDevice: String = "Pixel Buds Pro",
     lyrics: TrackLyrics? = null,
     isLyricsActive: Boolean = false,
     onToggleLyrics: () -> Unit = {},
@@ -611,36 +608,6 @@ fun PixelExpandedPlayer(
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     color = if (isLyricsActive) MonochromeBlack else MonochromeWhite
-                )
-            }
-
-            // Audio Device Indicator Pill
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(percent = 50))
-                    .background(MonochromeSurfaceContainer)
-                    .border(1.dp, MonochromeOutlineVariant, RoundedCornerShape(percent = 50))
-                    .clickable {
-                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                        onAudioRouteClick()
-                    }
-                    .padding(horizontal = 12.dp, vertical = 6.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Headphones,
-                    contentDescription = "Audio Device",
-                    tint = MonochromeSilver,
-                    modifier = Modifier.size(13.dp)
-                )
-                Spacer(modifier = Modifier.width(6.dp))
-                Text(
-                    text = activeAudioDevice,
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MonochromeSilver,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
                 )
             }
 
