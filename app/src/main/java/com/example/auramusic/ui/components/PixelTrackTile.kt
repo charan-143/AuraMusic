@@ -96,52 +96,58 @@ fun PixelTrackTile(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.SpaceBetween
     ) {
-        // Left: Squircle Album Thumbnail with Equalizer Overlay
+        // Left: Squircle Album Thumbnail with Subtle Playing Badge
         Box(
             modifier = Modifier
-                .size(46.dp)
-                .clip(RoundedCornerShape(12.dp))
+                .size(48.dp)
+                .clip(RoundedCornerShape(14.dp))
                 .background(MonochromeSurfaceContainer)
         ) {
             PixelSquircleAlbumArt(
                 coverArtUrl = track.coverArtUrl,
                 isPlaying = isSelected && isPlaying,
-                cornerRadius = 12.dp,
+                cornerRadius = 14.dp,
                 showVinylGrooves = false,
-                modifier = Modifier.size(46.dp)
+                titleFallback = track.title,
+                modifier = Modifier.size(48.dp)
             )
 
             if (isSelected && isPlaying) {
-                // Live monochrome equalizer bars
-                Row(
+                // Discrete live equalizer mini indicator in bottom corner
+                Box(
                     modifier = Modifier
                         .matchParentSize()
-                        .background(Color.Black.copy(alpha = 0.5f))
-                        .padding(horizontal = 10.dp),
-                    horizontalArrangement = Arrangement.SpaceEvenly,
-                    verticalAlignment = Alignment.Bottom
+                        .background(Color.Black.copy(alpha = 0.35f))
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    contentAlignment = Alignment.BottomCenter
                 ) {
-                    Box(
-                        modifier = Modifier
-                            .width(3.dp)
-                            .height((20 * bar1).dp.coerceAtLeast(4.dp))
-                            .clip(RoundedCornerShape(2.dp))
-                            .background(MonochromeWhite)
-                    )
-                    Box(
-                        modifier = Modifier
-                            .width(3.dp)
-                            .height((20 * bar2).dp.coerceAtLeast(4.dp))
-                            .clip(RoundedCornerShape(2.dp))
-                            .background(MonochromeWhite)
-                    )
-                    Box(
-                        modifier = Modifier
-                            .width(3.dp)
-                            .height((20 * bar3).dp.coerceAtLeast(4.dp))
-                            .clip(RoundedCornerShape(2.dp))
-                            .background(MonochromeWhite)
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        horizontalArrangement = Arrangement.SpaceEvenly,
+                        verticalAlignment = Alignment.Bottom
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .width(3.dp)
+                                .height((18 * bar1).dp.coerceAtLeast(4.dp))
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(MonochromeWhite)
+                        )
+                        Box(
+                            modifier = Modifier
+                                .width(3.dp)
+                                .height((18 * bar2).dp.coerceAtLeast(4.dp))
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(MonochromeWhite)
+                        )
+                        Box(
+                            modifier = Modifier
+                                .width(3.dp)
+                                .height((18 * bar3).dp.coerceAtLeast(4.dp))
+                                .clip(RoundedCornerShape(2.dp))
+                                .background(MonochromeWhite)
+                        )
+                    }
                 }
             }
         }

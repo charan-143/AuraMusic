@@ -103,6 +103,7 @@ fun PixelMiniPlayer(
                     isPlaying = isPlaying,
                     cornerRadius = 14.dp,
                     showVinylGrooves = false,
+                    titleFallback = track.title,
                     modifier = Modifier.size(48.dp)
                 )
             }

@@ -589,7 +589,8 @@ fun MainScreen(
                                         coverArtUrl = currentTrack.coverArtUrl,
                                         isPlaying = playerState.isPlaying,
                                         cornerRadius = 16.dp,
-                                        showVinylGrooves = true,
+                                        showVinylGrooves = false,
+                                        titleFallback = currentTrack.title,
                                         modifier = Modifier.size(64.dp)
                                     )
                                     Spacer(modifier = Modifier.width(14.dp))

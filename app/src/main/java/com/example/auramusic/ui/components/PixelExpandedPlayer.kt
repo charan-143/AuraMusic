@@ -164,7 +164,8 @@ fun PixelExpandedPlayer(
                 coverArtUrl = track.coverArtUrl,
                 isPlaying = playerState.isPlaying,
                 cornerRadius = 32.dp,
-                showVinylGrooves = true,
+                showVinylGrooves = false,
+                titleFallback = track.title,
                 modifier = Modifier.fillMaxWidth()
             )
         }
