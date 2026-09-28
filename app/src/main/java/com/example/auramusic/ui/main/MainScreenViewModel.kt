@@ -572,6 +572,10 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         playerManager.setActiveAudioOutputDevice(name)
     }
 
+    fun resetAudioOutputDeviceToAuto() {
+        playerManager.resetAudioOutputDeviceToAuto()
+    }
+
     fun getAudioSessionId(): Int = playerManager.getAudioSessionId()
 
     // Sleep Timer Controls

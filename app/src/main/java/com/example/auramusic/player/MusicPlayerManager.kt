@@ -1,7 +1,12 @@
 package com.example.auramusic.player
 
 import android.content.Context
+import android.media.AudioDeviceCallback
+import android.media.AudioDeviceInfo
+import android.media.AudioManager
 import android.net.Uri
+import android.os.Handler
+import android.os.Looper
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
@@ -71,7 +76,26 @@ class MusicPlayerManager(private val context: Context) {
             }
     }
 
+    private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
+
+    private val audioDeviceCallback = object : AudioDeviceCallback() {
+        override fun onAudioDevicesAdded(addedDevices: Array<out AudioDeviceInfo>?) {
+            detectAudioOutputDevice()
+        }
+
+        override fun onAudioDevicesRemoved(removedDevices: Array<out AudioDeviceInfo>?) {
+            detectAudioOutputDevice()
+        }
+    }
+
     init {
+        try {
+            audioManager?.registerAudioDeviceCallback(audioDeviceCallback, Handler(Looper.getMainLooper()))
+        } catch (e: Exception) {
+            // safe fallback
+        }
+        detectAudioOutputDevice()
+
         scope.launch {
             equalizerManager.state.collect { eqState ->
                 val badge = if (!eqState.isEnabled) {
@@ -337,8 +361,101 @@ class MusicPlayerManager(private val context: Context) {
         return exoPlayer.audioSessionId
     }
 
+    fun detectAudioOutputDevice() {
+        try {
+            val outputs = audioManager?.getDevices(AudioManager.GET_DEVICES_OUTPUTS) ?: emptyArray()
+
+            // 1. Check for Bluetooth Sink
+            val btDevice = outputs.firstOrNull { dev ->
+                dev.isSink && (
+                    dev.type == AudioDeviceInfo.TYPE_BLUETOOTH_A2DP ||
+                    dev.type == AudioDeviceInfo.TYPE_BLE_HEADSET ||
+                    dev.type == AudioDeviceInfo.TYPE_BLE_SPEAKER ||
+                    dev.type == AudioDeviceInfo.TYPE_BLUETOOTH_SCO
+                )
+            }
+
+            // 2. Check for Wired Sink
+            val wiredDevice = outputs.firstOrNull { dev ->
+                dev.isSink && (
+                    dev.type == AudioDeviceInfo.TYPE_WIRED_HEADSET ||
+                    dev.type == AudioDeviceInfo.TYPE_WIRED_HEADPHONES ||
+                    dev.type == AudioDeviceInfo.TYPE_LINE_ANALOG ||
+                    dev.type == AudioDeviceInfo.TYPE_LINE_DIGITAL
+                )
+            }
+
+            // 3. Check for USB Sink
+            val usbDevice = outputs.firstOrNull { dev ->
+                dev.isSink && (
+                    dev.type == AudioDeviceInfo.TYPE_USB_HEADSET ||
+                    dev.type == AudioDeviceInfo.TYPE_USB_DEVICE ||
+                    dev.type == AudioDeviceInfo.TYPE_USB_ACCESSORY
+                )
+            }
+
+            val (deviceName, deviceType) = when {
+                btDevice != null -> {
+                    val rawName = btDevice.productName?.toString()?.trim().orEmpty()
+                    val name = if (rawName.isNotBlank() && !rawName.equals("Bluetooth", ignoreCase = true)) rawName else "Bluetooth Headphones"
+                    name to "BLUETOOTH"
+                }
+                usbDevice != null -> {
+                    val rawName = usbDevice.productName?.toString()?.trim().orEmpty()
+                    val name = if (rawName.isNotBlank()) rawName else "USB-C Audio DAC"
+                    name to "USB"
+                }
+                wiredDevice != null -> {
+                    val rawName = wiredDevice.productName?.toString()?.trim().orEmpty()
+                    val name = if (rawName.isNotBlank()) rawName else "Wired Headphones"
+                    name to "WIRED"
+                }
+                else -> {
+                    "Phone Speaker" to "SPEAKER"
+                }
+            }
+
+            _playerState.update {
+                it.copy(
+                    activeAudioOutputDevice = deviceName,
+                    activeAudioDeviceType = deviceType,
+                    isAudioRouteAutoDetected = true
+                )
+            }
+        } catch (e: Exception) {
+            _playerState.update {
+                it.copy(
+                    activeAudioOutputDevice = "Phone Speaker",
+                    activeAudioDeviceType = "SPEAKER",
+                    isAudioRouteAutoDetected = true
+                )
+            }
+        }
+    }
+
+    fun resetAudioOutputDeviceToAuto() {
+        detectAudioOutputDevice()
+    }
+
     fun setActiveAudioOutputDevice(name: String) {
-        _playerState.update { it.copy(activeAudioOutputDevice = name) }
+        if (name.contains("Auto", ignoreCase = true)) {
+            detectAudioOutputDevice()
+            return
+        }
+        val type = when {
+            name.contains("Bluetooth", ignoreCase = true) || name.contains("Buds", ignoreCase = true) || name.contains("WH-", ignoreCase = true) || name.contains("AirPods", ignoreCase = true) -> "BLUETOOTH"
+            name.contains("USB", ignoreCase = true) || name.contains("DAC", ignoreCase = true) -> "USB"
+            name.contains("Wired", ignoreCase = true) || name.contains("Headphone", ignoreCase = true) -> "WIRED"
+            name.contains("Speaker", ignoreCase = true) -> "SPEAKER"
+            else -> "BLUETOOTH"
+        }
+        _playerState.update {
+            it.copy(
+                activeAudioOutputDevice = name,
+                activeAudioDeviceType = type,
+                isAudioRouteAutoDetected = false
+            )
+        }
     }
 
     fun clearQueue() {
@@ -463,6 +580,11 @@ class MusicPlayerManager(private val context: Context) {
 
     fun release() {
         stopTicker()
+        try {
+            audioManager?.unregisterAudioDeviceCallback(audioDeviceCallback)
+        } catch (e: Exception) {
+            // safe fallback
+        }
         equalizerManager.release()
         exoPlayer.release()
     }

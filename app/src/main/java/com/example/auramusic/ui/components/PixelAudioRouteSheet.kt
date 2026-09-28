@@ -35,6 +35,7 @@ import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.Speaker
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
@@ -83,6 +84,17 @@ fun PixelAudioRouteSheet(
     val detectedRoutes = remember(visible) {
         val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
         val routes = mutableListOf<AudioRouteItem>()
+
+        // 0. Auto Route (System Detected)
+        routes.add(
+            AudioRouteItem(
+                id = "auto_route",
+                title = "Auto (System Route)",
+                subtitle = "Automatically follows system & connected Bluetooth / Wired",
+                icon = Icons.Default.Tune,
+                isLosslessCapable = true
+            )
+        )
 
         // 1. Phone Speaker
         routes.add(
