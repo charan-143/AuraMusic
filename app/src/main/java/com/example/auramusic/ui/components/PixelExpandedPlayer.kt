@@ -62,6 +62,10 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.animation.Crossfade
+import androidx.compose.animation.core.tween
+import androidx.compose.material.icons.filled.Mic
+import com.example.auramusic.model.TrackLyrics
 import com.example.auramusic.player.PlayerState
 import com.example.auramusic.theme.MonochromeBlack
 import com.example.auramusic.theme.MonochromeLightGrey
@@ -93,6 +97,10 @@ fun PixelExpandedPlayer(
     onMoreOptionsClick: () -> Unit = {},
     onEqualizerClick: () -> Unit = {},
     activeAudioDevice: String = "Pixel Buds Pro",
+    lyrics: TrackLyrics? = null,
+    isLyricsActive: Boolean = false,
+    onToggleLyrics: () -> Unit = {},
+    onSeekToTimestamp: (Long) -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val haptic = LocalHapticFeedback.current
@@ -229,6 +237,21 @@ fun PixelExpandedPlayer(
                 IconButton(
                     onClick = {
                         haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                        onToggleLyrics()
+                    },
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.Mic,
+                        contentDescription = "Synced Lyrics",
+                        tint = if (isLyricsActive) MonochromeWhite else MonochromeSilver,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+
+                IconButton(
+                    onClick = {
+                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
                         onEqualizerClick()
                     },
                     modifier = Modifier.size(40.dp)
@@ -260,21 +283,50 @@ fun PixelExpandedPlayer(
 
         Spacer(modifier = Modifier.weight(0.25f).defaultMinSize(minHeight = 8.dp))
 
-        // 2. Hero Pixel Squircle Album Artwork
+        // 2. Hero Pixel Squircle Album Artwork OR Live Synced Lyrics View
         Box(
             modifier = Modifier
                 .weight(1.5f)
-                .fillMaxWidth(0.88f),
+                .fillMaxWidth(if (isLyricsActive) 1.0f else 0.88f),
             contentAlignment = Alignment.Center
         ) {
-            PixelSquircleAlbumArt(
-                coverArtUrl = track.coverArtUrl,
-                isPlaying = playerState.isPlaying,
-                cornerRadius = 28.dp,
-                showVinylGrooves = false,
-                titleFallback = track.title,
-                modifier = Modifier.fillMaxSize()
-            )
+            Crossfade(
+                targetState = isLyricsActive,
+                animationSpec = tween(280),
+                label = "lyricsViewCrossfade"
+            ) { active ->
+                if (active) {
+                    PixelSyncedLyricsView(
+                        lyrics = lyrics,
+                        currentPositionMs = playerState.currentPositionMs,
+                        onSeekToTimestamp = onSeekToTimestamp,
+                        onSwitchToAlbumArt = onToggleLyrics,
+                        modifier = Modifier.fillMaxSize()
+                    )
+                } else {
+                    Box(
+                        modifier = Modifier
+                            .fillMaxSize()
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null
+                            ) {
+                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                                onToggleLyrics()
+                            },
+                        contentAlignment = Alignment.Center
+                    ) {
+                        PixelSquircleAlbumArt(
+                            coverArtUrl = track.coverArtUrl,
+                            isPlaying = playerState.isPlaying,
+                            cornerRadius = 28.dp,
+                            showVinylGrooves = false,
+                            titleFallback = track.title,
+                            modifier = Modifier.fillMaxSize()
+                        )
+                    }
+                }
+            }
         }
 
         Spacer(modifier = Modifier.weight(0.35f).defaultMinSize(minHeight = 14.dp))
@@ -531,6 +583,34 @@ fun PixelExpandedPlayer(
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Bold,
                     color = MonochromeWhite
+                )
+            }
+
+            // Synced Lyrics Pill Toggle
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier
+                    .clip(RoundedCornerShape(percent = 50))
+                    .background(if (isLyricsActive) MonochromeWhite else MonochromeSurfaceContainer)
+                    .border(1.dp, if (isLyricsActive) MonochromeWhite else MonochromeOutlineVariant, RoundedCornerShape(percent = 50))
+                    .clickable {
+                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                        onToggleLyrics()
+                    }
+                    .padding(horizontal = 12.dp, vertical = 6.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.Mic,
+                    contentDescription = "Lyrics",
+                    tint = if (isLyricsActive) MonochromeBlack else MonochromeSilver,
+                    modifier = Modifier.size(13.dp)
+                )
+                Spacer(modifier = Modifier.width(4.dp))
+                Text(
+                    text = "Lyrics",
+                    fontSize = 11.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = if (isLyricsActive) MonochromeBlack else MonochromeWhite
                 )
             }
 
