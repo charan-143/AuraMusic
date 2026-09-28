@@ -21,6 +21,7 @@ This document provides a record of all features, architectural milestones, UI/UX
 | **FEAT-011** | Interactive Search & Filter Chips | Navigation/Search| `COMPLETE` | StateFlow & LazyRow | 2026-09-27 |
 | **FEAT-012** | Interactive Generative UI Simulator | Web Simulation | `COMPLETE` | Web Audio API & Canvas | 2026-09-27 |
 | **FEAT-013** | Motorola Edge 50 Pro Physical Deployment | Deployment | `COMPLETE` | Hardware (PID 31830) | 2026-09-27 |
+| **FEAT-028** | Complete Component Functionality & Hardware Integration | Feature Completion & Hardware | `COMPLETE` | Motorola Edge 50 Pro | 2026-09-28 |
 
 ---
 
@@ -538,6 +539,52 @@ This document provides a record of all features, architectural milestones, UI/UX
 - **Verification**:
   - `.\gradlew.bat assembleDebug` completed cleanly (`BUILD SUCCESSFUL in 33s`).
   - Installed and verified live on Motorola Edge 50 Pro (`PID 24846`). Startup duration dropped and UI runs with smooth scrolling.
+
+---
+
+### [FEAT-028] Complete Component Functionality & Hardware Integration
+- **Date**: 2026-09-28
+- **Category**: Feature Completion & Hardware Audio Routing
+- **Status**: COMPLETE
+- **Files Affected**:
+  - `app/src/main/java/com/example/auramusic/player/PlayerState.kt`
+  - `app/src/main/java/com/example/auramusic/player/MusicPlayerManager.kt`
+  - `app/src/main/java/com/example/auramusic/data/PlaylistRepository.kt`
+  - `app/src/main/java/com/example/auramusic/ui/components/PixelAudioRouteSheet.kt`
+  - `app/src/main/java/com/example/auramusic/ui/components/PixelSleepTimerDialog.kt`
+  - `app/src/main/java/com/example/auramusic/ui/components/PixelQueueSheet.kt`
+  - `app/src/main/java/com/example/auramusic/ui/components/PixelExpandedPlayer.kt`
+  - `app/src/main/java/com/example/auramusic/ui/components/PixelAtAGlanceHeader.kt`
+  - `app/src/main/java/com/example/auramusic/ui/main/MainScreen.kt`
+  - `app/src/main/java/com/example/auramusic/ui/main/MainScreenViewModel.kt`
+- **Description**:
+  Addressed the user's request: *"make every component functional"*
+  1. **Zero Placeholder Handlers**:
+     - Audited all screens and sheets, replacing every empty callback or no-op click with direct business logic in `MusicPlayerManager`, `PlaylistRepository`, or Android system audio intents.
+  2. **Hardware Audio Output Routing & Dolby Atmos Integration**:
+     - Created `PixelAudioRouteSheet.kt` leveraging `AudioManager.getDevices(GET_DEVICES_OUTPUTS)` to detect real phone loudspeakers, connected Bluetooth devices (Pixel Buds Pro, Moto Buds), and high-resolution USB-C Lossless DACs.
+     - Connected "Equalizer FX" button via `AudioEffect.ACTION_DISPLAY_AUDIO_EFFECT_CONTROL_PANEL` passing ExoPlayer's `audioSessionId`, linking directly into Motorola's native **Dolby Atmos** audio enhancement engine.
+     - Added "Audio Settings" button linking to system Bluetooth / Audio preferences.
+     - Made the At-a-Glance top audio pill clickable to instantly open this route selector.
+  3. **Configurable Sleep Timer**:
+     - Created `PixelSleepTimerDialog.kt` supporting 15, 30, 45, and 60-minute countdown presets, plus "Turn Off".
+     - Implemented countdown tracking in `MusicPlayerManager.kt` with coroutine tick and automatic playback pause upon expiry.
+     - Wired into the Expanded Player's more menu (`MoreVert`) and Settings screen.
+  4. **Queue Sheet Actions**:
+     - Added "Clear Queue" button (`DeleteSweep`) clearing non-playing queue items.
+     - Added individual track removal buttons (`Close`) on each item in `PixelQueueSheet.kt`.
+     - Wired Play All and Shuffle actions.
+  5. **Persistent Favorites Toggle System**:
+     - Added persistent `favoriteTrackIds: StateFlow<Set<String>>` to `PlaylistRepository.kt` backed by SharedPreferences.
+     - Connected the Heart icon in `PixelExpandedPlayer.kt` and `PixelTrackTile.kt` to `toggleFavorite(track)`.
+     - Automatically creates and synchronizes a `"Monochrome Favorites"` custom playlist in the Library tab.
+  6. **Interactive Search Source Filter Chips & Custom Playlist Deletion**:
+     - Made filter chips (`All Tracks`, `Spotify`, `YouTube Music`, `Lossless FLAC`, `Albums`) actively filter live online search results.
+     - Added playlist/album deletion button (`Delete`) to `PixelAlbumCard.kt` and Library tab.
+- **Verification**:
+  - Gradle `assembleDebug` completed cleanly.
+  - Installed and verified live on Motorola Edge 50 Pro (`ZD222MKB8C`).
+  - Screen captures verified: `aura_expanded_player.png` (Dolby Atmos panel launched), `aura_now_playing.png` (Audio route sheet active), `aura_route_sheet.png` (Sleep timer options), `aura_timer_active.png` (30 min countdown confirmed).
 
 ---
 
