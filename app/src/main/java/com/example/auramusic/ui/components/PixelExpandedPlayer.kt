@@ -126,6 +126,12 @@ fun PixelExpandedPlayer(
             .clip(RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp))
             .background(MonochromeSurface)
             .border(1.dp, MonochromeOutline, RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) {
+                // Intentionally consume all clicks inside the player sheet so they do not fall through to the background dismiss scrim
+            }
             .navigationBarsPadding()
             .padding(horizontal = 24.dp, vertical = 8.dp),
         horizontalAlignment = Alignment.CenterHorizontally
@@ -138,7 +144,7 @@ fun PixelExpandedPlayer(
                 .pointerInput(Unit) {
                     detectVerticalDragGestures(
                         onDragEnd = {
-                            if (dragOffsetY > 140f) {
+                            if (dragOffsetY > 250f) {
                                 onCollapseClick()
                             }
                             dragOffsetY = 0f
@@ -174,24 +180,7 @@ fun PixelExpandedPlayer(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .height(48.dp)
-                .pointerInput(Unit) {
-                    detectVerticalDragGestures(
-                        onDragEnd = {
-                            if (dragOffsetY > 140f) {
-                                onCollapseClick()
-                            }
-                            dragOffsetY = 0f
-                        },
-                        onDragCancel = {
-                            dragOffsetY = 0f
-                        },
-                        onVerticalDrag = { change, dragAmount ->
-                            change.consume()
-                            dragOffsetY = (dragOffsetY + dragAmount).coerceAtLeast(0f)
-                        }
-                    )
-                },
+                .height(48.dp),
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {
