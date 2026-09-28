@@ -27,6 +27,7 @@ This document provides a record of all features, architectural milestones, UI/UX
 | **FEAT-030** | Dual-Mode Audio Equalizer (AI-Assisted & Manual Graphic) | Audio DSP & UI | `COMPLETE` | Motorola Edge 50 Pro | 2026-09-28 |
 | **FEAT-031** | Full-Length Online Music Engine, Home Recommendations & Rich Search Discovery | Audio Streaming & UI | `COMPLETE` | Motorola Edge 50 Pro | 2026-09-28 |
 | **FEAT-032** | Bottom-Attached Flush Navigation Bar & Expanded Player Geometry Fix | UI/UX & Layout Architecture | `COMPLETE` | Motorola Edge 50 Pro | 2026-09-28 |
+| **FEAT-033** | Seamless Screen Switching, Tactile Spring Animations, and Bottom-Attached Player & Queue Sheets | UI/UX, Animations & Navigation Architecture | `COMPLETE` | Motorola Edge 50 Pro | 2026-09-28 |
 
 ---
 
@@ -760,6 +761,42 @@ This document provides a record of all features, architectural milestones, UI/UX
   - Screen captures verified on device:
     - `aura_home_nav_attached.png`: Bottom navigation tabs attached flush to the bottom edge, full width, zero shadows, no floating card curves.
     - `aura_expanded_player_verified.png`: Expanded player showing *Tera Mera Rishta* with perfect alignment, zero text overlapping the album artwork, status bar clearance, and balanced control spacing.
+
+---
+
+### [FEAT-033] Seamless Screen Switching, Tactile Spring Animations, and Bottom-Attached Player & Queue Sheets
+- **Date**: 2026-09-28
+- **Category**: UI/UX, Animations & Navigation Architecture
+- **Status**: `COMPLETE`
+- **Files Affected**:
+  - `app/src/main/java/com/example/auramusic/ui/main/MainScreen.kt`
+  - `app/src/main/java/com/example/auramusic/ui/components/PixelExpandedPlayer.kt`
+  - `app/src/main/java/com/example/auramusic/ui/components/PixelQueueSheet.kt`
+- **Description**:
+  Addressed the user's requirements for screen switching, fluid motion animations, and bottom-attached music player and up next screens:
+  1. **Hierarchical System Back Navigation & Screen Switching (`BackHandler`)**:
+     - Resolved the critical navigation trap where pressing the system back button or back gesture caused the application to close instead of dismissing the active overlay or returning to the previous screen.
+     - Implemented layered `BackHandler` hooks in Compose prioritizing:
+       1. Dialog dismissal (`isCreatePlaylistDialogVisible`, `isSleepTimerDialogVisible`)
+       2. Sheet dismissal (`isAddToPlaylistSheetVisible`, `isAlbumSheetVisible`, `isEqualizerSheetVisible`, `isAudioRouteSheetVisible`)
+       3. Up Next Queue dismissal (`isQueueVisible`)
+       4. Expanded Player collapse (`isExpandedPlayer -> setExpandedPlayer(false)`)
+       5. Screen transition to Home (`currentTab != PixelNavTab.HOME -> setNavTab(PixelNavTab.HOME)`)
+  2. **Fluid Screen/Tab Transitions & Tactile Animations**:
+     - Wrapped the active screen tabs in `AnimatedContent(targetState = currentTab)` with direction-aware horizontal spring slides (`slideInHorizontally` + `slideOutHorizontally`) with `Spring.DampingRatioLowBouncy` and synchronized cubic bezier alpha fades (`FastOutSlowInEasing`).
+     - Maintained persistent anchors for top At-a-Glance widget, bottom navigation tabs, and floating mini player during screen transitions.
+  3. **Bottom-Attached Music Player Screen**:
+     - Converted `PixelExpandedPlayer` into a bottom-attached sheet occupying `fillMaxHeight(0.93f)` anchored to `Alignment.BottomCenter`.
+     - Styled with 32dp top rounded squircle corners (`RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp)`), a crisp 1dp boundary border (`MonochromeOutline`), and a top tactile drag pill handle (42dp x 4dp).
+     - Added natural vertical drag-to-dismiss gesture physics: dragging downward smoothly offsets the player sheet with `PixelMotion.BouncySpring` feedback and collapses the player when released beyond 140px.
+     - Added a dimming scrim backdrop (`Color.Black.copy(alpha = 0.65f)`) behind the player that smoothly fades in and collapses the player upon tapping.
+  4. **Bottom-Attached Up Next Queue Screen**:
+     - Converted `PixelQueueSheet` into a bottom-attached sheet (`fillMaxHeight(0.85f)`) anchored to `Alignment.BottomCenter`.
+     - Added vertical swipe-to-dismiss physics on the top handle and header area with animated bounce-back physics.
+     - Added dimming scrim backdrop that dismisses the queue upon tapping.
+- **Verification**:
+  - Successfully compiled with zero errors via `./gradlew.bat compileDebugKotlin` and installed on Motorola Edge 50 Pro (`ZD222MKB8C`).
+  - Verified live on physical hardware via ADB screencap (`screen_home.png`).
 
 ---
 
