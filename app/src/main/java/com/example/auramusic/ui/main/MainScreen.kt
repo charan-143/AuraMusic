@@ -77,6 +77,7 @@ import com.example.auramusic.ui.components.PixelAtAGlanceHeader
 import com.example.auramusic.ui.components.PixelAudioRouteSheet
 import com.example.auramusic.ui.components.PixelBottomNavBar
 import com.example.auramusic.ui.components.PixelCreatePlaylistDialog
+import com.example.auramusic.ui.components.PixelEqualizerSheet
 import com.example.auramusic.ui.components.PixelExpandedPlayer
 import com.example.auramusic.ui.components.PixelMiniPlayer
 import com.example.auramusic.ui.components.PixelNavTab
@@ -121,6 +122,8 @@ fun MainScreen(
         val isQueueVisible by viewModel.isQueueVisible.collectAsState()
         val isAudioRouteSheetVisible by viewModel.isAudioRouteSheetVisible.collectAsState()
         val isSleepTimerDialogVisible by viewModel.isSleepTimerDialogVisible.collectAsState()
+        val equalizerState by viewModel.equalizerState.collectAsState()
+        val isEqualizerSheetVisible by viewModel.isEqualizerSheetVisible.collectAsState()
         val selectedCategory by viewModel.selectedCategory.collectAsState()
 
         val sourceFilterChips = listOf("All Tracks", "Spotify", "YouTube Music", "Lossless FLAC", "Albums")
@@ -1080,6 +1083,81 @@ fun MainScreen(
                             }
                         }
 
+                        // Audio Equalizer & Spatial FX Card
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(24.dp))
+                                    .background(colors.cardBackground)
+                                    .border(1.dp, colors.outlineVariant, RoundedCornerShape(24.dp))
+                                    .clickable {
+                                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                                        viewModel.openEqualizerSheet()
+                                    }
+                                    .padding(18.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        modifier = Modifier.weight(1f)
+                                    ) {
+                                        Box(
+                                            contentAlignment = Alignment.Center,
+                                            modifier = Modifier
+                                                .size(42.dp)
+                                                .clip(RoundedCornerShape(14.dp))
+                                                .background(colors.surfaceContainer)
+                                                .border(1.dp, colors.outlineVariant, RoundedCornerShape(14.dp))
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.GraphicEq,
+                                                contentDescription = "Equalizer",
+                                                tint = colors.textPrimary,
+                                                modifier = Modifier.size(22.dp)
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.width(14.dp))
+                                        Column {
+                                            Text(
+                                                text = "Audio Equalizer & Spatial FX",
+                                                fontSize = 15.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = colors.textPrimary
+                                            )
+                                            Text(
+                                                text = if (equalizerState.isEnabled) {
+                                                    if (equalizerState.isAiMode) "✦ AI Assisted • ${equalizerState.detectedProfileName}" else "Manual Graphic • ${equalizerState.currentPreset.displayName}"
+                                                } else "Equalizer Bypassed",
+                                                fontSize = 12.sp,
+                                                color = colors.textSecondary
+                                            )
+                                        }
+                                    }
+
+                                    Spacer(modifier = Modifier.width(8.dp))
+
+                                    Box(
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(50))
+                                            .background(if (equalizerState.isEnabled) colors.activePillBackground else colors.surfaceContainer)
+                                            .padding(horizontal = 10.dp, vertical = 5.dp)
+                                    ) {
+                                        Text(
+                                            text = if (equalizerState.isEnabled) (if (equalizerState.isAiMode) "✦ AI ACTIVE" else "MANUAL") else "BYPASS",
+                                            fontSize = 9.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = if (equalizerState.isEnabled) colors.activePillText else colors.textTertiary
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
                         // Storage & Cache Management Card
                         item {
                             Box(
@@ -1389,6 +1467,7 @@ fun MainScreen(
                     onQueueClick = { viewModel.setQueueVisible(true) },
                     onAudioRouteClick = { viewModel.openAudioRouteSheet() },
                     onMoreOptionsClick = { viewModel.openSleepTimerDialog() },
+                    onEqualizerClick = { viewModel.openEqualizerSheet() },
                     activeAudioDevice = playerState.activeAudioOutputDevice
                 )
             }
@@ -1419,6 +1498,27 @@ fun MainScreen(
                 audioSessionId = viewModel.getAudioSessionId(),
                 onDeviceSelected = { viewModel.setActiveAudioOutputDevice(it) },
                 onDismiss = { viewModel.closeAudioRouteSheet() },
+                onEqualizerClick = {
+                    viewModel.closeAudioRouteSheet()
+                    viewModel.openEqualizerSheet()
+                },
+                modifier = Modifier.align(Alignment.BottomCenter)
+            )
+
+            // Audio Equalizer Bottom Sheet (AI Assisted & Manual Graphic)
+            PixelEqualizerSheet(
+                visible = isEqualizerSheetVisible,
+                equalizerState = equalizerState,
+                audioSessionId = viewModel.getAudioSessionId(),
+                onToggleEnabled = { viewModel.setEqualizerEnabled(it) },
+                onToggleAiMode = { viewModel.setEqualizerAiMode(it) },
+                onSelectAiTarget = { viewModel.setEqualizerAiTarget(it) },
+                onBandLevelChange = { band, level -> viewModel.setEqualizerBandLevel(band, level) },
+                onBassBoostChange = { viewModel.setEqualizerBassBoost(it) },
+                onVirtualizerChange = { viewModel.setEqualizerVirtualizer(it) },
+                onSelectPreset = { viewModel.applyEqualizerPreset(it) },
+                onResetToFlat = { viewModel.resetEqualizerToFlat() },
+                onDismiss = { viewModel.closeEqualizerSheet() },
                 modifier = Modifier.align(Alignment.BottomCenter)
             )
 
