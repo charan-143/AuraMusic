@@ -53,15 +53,29 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         prefs.edit().putBoolean("pref_is_dark_mode", next).apply()
     }
 
-    // Audio Streaming Quality Preference
+    // Audio Streaming Quality Preference: defaults to Auto (Signal Adaptive)
     private val _streamingQuality = MutableStateFlow(
-        prefs.getString("pref_streaming_quality", "Lossless Master (24-bit FLAC)") ?: "Lossless Master (24-bit FLAC)"
+        prefs.getString("pref_streaming_quality", "Auto (Signal Adaptive)") ?: "Auto (Signal Adaptive)"
     )
     val streamingQuality: StateFlow<String> = _streamingQuality.asStateFlow()
 
     fun setStreamingQuality(quality: String) {
         _streamingQuality.value = quality
         prefs.edit().putString("pref_streaming_quality", quality).apply()
+        val isAuto = quality.startsWith("Auto")
+        playerManager.setAutoQualityEnabled(isAuto)
+        if (isAuto) {
+            val net = networkObserver.networkStatus.value
+            playerManager.applyAdaptiveQuality(
+                net.autoAudioQuality,
+                net.downstreamBandwidthKbps,
+                net.signalPercent,
+                net.isSignalFluctuating,
+                net.fluctuationNote
+            )
+        } else {
+            playerManager.setManualQuality(quality)
+        }
     }
 
     // 4 Bottom Navigation Tabs: Home, Search (Combined Search + For You), Library, Settings
@@ -191,10 +205,36 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         // Build initial discovery recommendations
         refreshRecommendations(null)
 
-        // Observe network changes for dynamic bitrate adaption
+        // Initialize Audio Streaming Quality mode
+        val initialQuality = _streamingQuality.value
+        val isAuto = initialQuality.startsWith("Auto")
+        playerManager.setAutoQualityEnabled(isAuto)
+        if (isAuto) {
+            val net = networkObserver.networkStatus.value
+            playerManager.applyAdaptiveQuality(
+                net.autoAudioQuality,
+                net.downstreamBandwidthKbps,
+                net.signalPercent,
+                net.isSignalFluctuating,
+                net.fluctuationNote
+            )
+        } else {
+            playerManager.setManualQuality(initialQuality)
+        }
+
+        // Observe network changes & signal fluctuations for dynamic bitrate adaptation
         viewModelScope.launch {
             networkObserver.networkStatus.collect { netStatus ->
                 playerManager.updateNetworkStatus(netStatus.statusText)
+                if (_streamingQuality.value.startsWith("Auto")) {
+                    playerManager.applyAdaptiveQuality(
+                        netStatus.autoAudioQuality,
+                        netStatus.downstreamBandwidthKbps,
+                        netStatus.signalPercent,
+                        netStatus.isSignalFluctuating,
+                        netStatus.fluctuationNote
+                    )
+                }
             }
         }
 

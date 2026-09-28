@@ -140,8 +140,12 @@ fun MainScreen(
                 PixelAtAGlanceHeader(
                     isPlaying = playerState.isPlaying,
                     activeTrackTitle = playerState.currentTrack?.title,
-                    networkStatusText = networkStatus.statusText,
-                    qualityBadge = playerState.currentTrack?.qualityBadge ?: "24-BIT FLAC",
+                    networkStatusText = if (playerState.isAutoQualityEnabled) {
+                        "${networkStatus.signalPercent}% Signal • ${playerState.activeStreamingQualityBadge}"
+                    } else {
+                        networkStatus.statusText
+                    },
+                    qualityBadge = if (playerState.isAutoQualityEnabled) playerState.activeStreamingQualityBadge else (playerState.currentTrack?.qualityBadge ?: "24-BIT FLAC"),
                     isTravelMode = playerState.isTravelModeEnabled,
                     isDarkMode = isDarkMode,
                     activeAudioDevice = playerState.activeAudioOutputDevice,
@@ -914,10 +918,11 @@ fun MainScreen(
                                     Spacer(modifier = Modifier.height(14.dp))
 
                                     val qualityOptions = listOf(
+                                        "Auto (Signal Adaptive)",
                                         "Lossless Master (24-bit FLAC)",
                                         "Spotify High (320kbps)",
                                         "YouTube Music Opus (256kbps)",
-                                        "Data Saver (Roaming Auto)"
+                                        "Data Saver (128kbps / Roaming)"
                                     )
 
                                     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -944,12 +949,21 @@ fun MainScreen(
                                                     horizontalArrangement = Arrangement.SpaceBetween,
                                                     modifier = Modifier.fillMaxWidth()
                                                 ) {
-                                                    Text(
-                                                        text = option,
-                                                        fontSize = 13.sp,
-                                                        fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                                                        color = colors.textPrimary
-                                                    )
+                                                    Column {
+                                                        Text(
+                                                            text = option,
+                                                            fontSize = 13.sp,
+                                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                                            color = colors.textPrimary
+                                                        )
+                                                        if (option.startsWith("Auto")) {
+                                                            Text(
+                                                                text = "Dynamically adapts to signal & network fluctuations",
+                                                                fontSize = 10.sp,
+                                                                color = colors.textSecondary
+                                                            )
+                                                        }
+                                                    }
                                                     if (isSelected) {
                                                         Icon(
                                                             imageVector = Icons.Default.Check,
@@ -959,6 +973,106 @@ fun MainScreen(
                                                         )
                                                     }
                                                 }
+                                            }
+                                        }
+                                    }
+
+                                    // Live Signal Fluctuation & Adaptive Quality Monitor Box
+                                    if (streamingQuality.startsWith("Auto")) {
+                                        Spacer(modifier = Modifier.height(14.dp))
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(16.dp))
+                                                .background(colors.surfaceContainer)
+                                                .border(1.dp, colors.outline, RoundedCornerShape(16.dp))
+                                                .padding(14.dp)
+                                        ) {
+                                            Column {
+                                                Row(
+                                                    modifier = Modifier.fillMaxWidth(),
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    verticalAlignment = Alignment.CenterVertically
+                                                ) {
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .size(8.dp)
+                                                                .clip(CircleShape)
+                                                                .background(if (networkStatus.isSignalFluctuating) colors.outline else colors.textPrimary)
+                                                        )
+                                                        Spacer(modifier = Modifier.width(6.dp))
+                                                        Text(
+                                                            text = if (networkStatus.isSignalFluctuating) "Signal Dip Detected" else "Signal Adaptive ABR",
+                                                            fontSize = 12.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = colors.textPrimary
+                                                        )
+                                                    }
+
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .clip(RoundedCornerShape(6.dp))
+                                                            .background(colors.cardBackground)
+                                                            .border(1.dp, colors.outlineVariant, RoundedCornerShape(6.dp))
+                                                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                                                    ) {
+                                                        Text(
+                                                            text = playerState.activeStreamingQualityBadge,
+                                                            fontSize = 10.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = colors.textPrimary
+                                                        )
+                                                    }
+                                                }
+
+                                                Spacer(modifier = Modifier.height(10.dp))
+
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                                    modifier = Modifier.fillMaxWidth()
+                                                ) {
+                                                    Text(
+                                                        text = "${networkStatus.signalPercent}% Signal (${networkStatus.downstreamBandwidthKbps / 1000} Mbps)",
+                                                        fontSize = 12.sp,
+                                                        fontWeight = FontWeight.Medium,
+                                                        color = colors.textSecondary
+                                                    )
+                                                    Text(
+                                                        text = playerState.activeStreamingQualityTitle,
+                                                        fontSize = 12.sp,
+                                                        fontWeight = FontWeight.Bold,
+                                                        color = colors.textPrimary
+                                                    )
+                                                }
+
+                                                Spacer(modifier = Modifier.height(6.dp))
+
+                                                // Dynamic Signal Strength Level Bar
+                                                Box(
+                                                    modifier = Modifier
+                                                        .fillMaxWidth()
+                                                        .height(4.dp)
+                                                        .clip(RoundedCornerShape(2.dp))
+                                                        .background(colors.outlineVariant)
+                                                ) {
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .fillMaxWidth(fraction = (networkStatus.signalPercent / 100f).coerceIn(0.1f, 1f))
+                                                            .height(4.dp)
+                                                            .background(colors.textPrimary)
+                                                    )
+                                                }
+
+                                                Spacer(modifier = Modifier.height(8.dp))
+
+                                                Text(
+                                                    text = playerState.autoQualitySwitchNote,
+                                                    fontSize = 11.sp,
+                                                    color = colors.textSecondary,
+                                                    lineHeight = 15.sp
+                                                )
                                             }
                                         }
                                     }

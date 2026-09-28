@@ -19,7 +19,14 @@ data class PlayerState(
     val bitrateMode: AudioBitrateMode = AudioBitrateMode.LOSSLESS_MASTER,
     val networkStatusText: String = "5G Lossless Connected",
     val sleepTimerRemainingSec: Int? = null,
-    val activeAudioOutputDevice: String = "Pixel Buds Pro"
+    val activeAudioOutputDevice: String = "Pixel Buds Pro",
+    val isAutoQualityEnabled: Boolean = true,
+    val activeStreamingQualityBadge: String = "AUTO 24-BIT",
+    val activeStreamingQualityTitle: String = "24-bit FLAC (Lossless)",
+    val signalStrengthPercent: Int = 95,
+    val linkBandwidthKbps: Int = 15000,
+    val autoQualitySwitchNote: String = "Auto: 24-bit FLAC active",
+    val isSignalFluctuating: Boolean = false
 ) {
     val progress: Float
         get() = if (durationMs > 0) (currentPositionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) else 0f

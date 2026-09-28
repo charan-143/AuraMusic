@@ -10,6 +10,7 @@ enum class StreamingSource(val displayName: String, val badge: String) {
 enum class AudioBitrateMode(val label: String, val kbps: Int) {
     LOSSLESS_MASTER("Studio Lossless", 1411), // 16/24-bit 44.1kHz FLAC
     HIGH_QUALITY("High Quality", 320),        // 320kbps
+    BALANCED("Balanced Opus", 256),           // 256kbps Opus HD
     ADAPTIVE_ROAMING("Roaming Adaptive", 128)  // 128kbps low-latency ABR for weak cellular
 }
 
