@@ -205,6 +205,9 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         // Build initial discovery recommendations
         refreshRecommendations(null)
 
+        // Fetch dynamic trending music from online catalog
+        loadTrendingMusic()
+
         // Initialize Audio Streaming Quality mode
         val initialQuality = _streamingQuality.value
         val isAuto = initialQuality.startsWith("Auto")
@@ -256,6 +259,21 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         loadDeviceTracks()
     }
 
+    fun loadTrendingMusic() {
+        viewModelScope.launch {
+            try {
+                val trending = onlineSearchService.fetchTrendingMusic()
+                if (trending.tracks.isNotEmpty() || trending.albums.isNotEmpty()) {
+                    _allTracks.value = (_allTracks.value + trending.tracks).distinctBy { it.id }
+                    _allAlbums.value = (_allAlbums.value + trending.albums).distinctBy { it.id }
+                    refreshRecommendations(playerState.value.currentTrack)
+                }
+            } catch (e: Exception) {
+                // Fallback handled in RecommendationEngine
+            }
+        }
+    }
+
     private fun loadDeviceTracks() {
         viewModelScope.launch {
             val deviceAudio = audioRepository.loadDeviceAudio()
@@ -283,12 +301,19 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     private fun refreshRecommendations(track: Track?) {
-        _recommendations.value = recommendationEngine.getOnlineRecommendationSections(track)
+        _recommendations.value = recommendationEngine.getOnlineRecommendationSections(
+            activeTrack = track,
+            providedTracks = _allTracks.value,
+            providedAlbums = _allAlbums.value
+        )
     }
 
     // Playback and Selection
     fun playTrack(track: Track) {
-        val currentQueue = filteredTracks.value.ifEmpty { listOf(track) }
+        val currentQueue = filteredTracks.value.ifEmpty { 
+            val recTracks = _recommendations.value.flatMap { it.tracks }
+            if (recTracks.isNotEmpty()) recTracks else listOf(track)
+        }
         val index = currentQueue.indexOfFirst { it.id == track.id }.coerceAtLeast(0)
         playerManager.setQueue(currentQueue, index)
         playerManager.playTrack(track, currentQueue)
@@ -298,6 +323,14 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     fun openAlbum(album: Album) {
         _selectedAlbum.value = album
         _isAlbumSheetVisible.value = true
+        if (album.tracks.isEmpty() || album.tracks.size <= 1) {
+            viewModelScope.launch {
+                val fullTracks = onlineSearchService.fetchAlbumTracks(album.id)
+                if (fullTracks.isNotEmpty()) {
+                    _selectedAlbum.value = album.copy(tracks = fullTracks)
+                }
+            }
+        }
     }
 
     fun closeAlbumSheet() {
@@ -308,6 +341,15 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         if (album.tracks.isNotEmpty()) {
             playerManager.setQueue(album.tracks, 0)
             playerManager.playTrack(album.tracks.first(), album.tracks)
+        } else {
+            viewModelScope.launch {
+                val fullTracks = onlineSearchService.fetchAlbumTracks(album.id)
+                if (fullTracks.isNotEmpty()) {
+                    _selectedAlbum.value = album.copy(tracks = fullTracks)
+                    playerManager.setQueue(fullTracks, 0)
+                    playerManager.playTrack(fullTracks.first(), fullTracks)
+                }
+            }
         }
     }
 
@@ -316,7 +358,27 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
             val shuffled = album.tracks.shuffled()
             playerManager.setQueue(shuffled, 0)
             playerManager.playTrack(shuffled.first(), shuffled)
+        } else {
+            viewModelScope.launch {
+                val fullTracks = onlineSearchService.fetchAlbumTracks(album.id)
+                if (fullTracks.isNotEmpty()) {
+                    val shuffled = fullTracks.shuffled()
+                    _selectedAlbum.value = album.copy(tracks = fullTracks)
+                    playerManager.setQueue(shuffled, 0)
+                    playerManager.playTrack(shuffled.first(), shuffled)
+                }
+            }
         }
+    }
+
+    fun searchTrending(term: String) {
+        setNavTab(PixelNavTab.SEARCH)
+        setSearchQuery(term)
+    }
+
+    fun searchGenre(genre: String) {
+        setNavTab(PixelNavTab.SEARCH)
+        setSearchQuery(genre)
     }
 
     // Playlist Actions
