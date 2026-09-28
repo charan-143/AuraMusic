@@ -37,11 +37,23 @@ import com.example.auramusic.model.Track
 import com.example.auramusic.theme.MonochromeBlack
 import com.example.auramusic.theme.MonochromeLightGrey
 import com.example.auramusic.theme.MonochromeMuted
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.offset
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.unit.IntOffset
 import com.example.auramusic.theme.MonochromeOutline
 import com.example.auramusic.theme.MonochromeSilver
 import com.example.auramusic.theme.MonochromeSurface
 import com.example.auramusic.theme.MonochromeSurfaceContainer
 import com.example.auramusic.theme.MonochromeWhite
+import com.example.auramusic.theme.PixelMotion
 
 @Composable
 fun PixelQueueSheet(
@@ -57,32 +69,88 @@ fun PixelQueueSheet(
 ) {
     val haptic = LocalHapticFeedback.current
 
+    var dragOffsetY by remember { mutableStateOf(0f) }
+    val animatedOffsetY by animateFloatAsState(
+        targetValue = dragOffsetY,
+        animationSpec = PixelMotion.BouncySpring,
+        label = "queueDragOffset"
+    )
+
     Column(
         modifier = modifier
             .fillMaxWidth()
+            .fillMaxHeight(0.85f)
+            .offset { IntOffset(0, animatedOffsetY.toInt()) }
             .clip(RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp))
             .background(MonochromeSurface)
             .border(1.dp, MonochromeOutline, RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp))
             .navigationBarsPadding()
-            .padding(top = 12.dp, bottom = 24.dp)
+            .padding(top = 10.dp, bottom = 24.dp)
     ) {
-        // Drag Pill Handle
+        // Drag Pill Handle with vertical swipe gesture
         Box(
             modifier = Modifier
-                .align(Alignment.CenterHorizontally)
-                .width(38.dp)
-                .height(4.dp)
-                .clip(RoundedCornerShape(percent = 50))
-                .background(MonochromeMuted)
-        )
+                .fillMaxWidth()
+                .padding(vertical = 4.dp)
+                .pointerInput(Unit) {
+                    detectVerticalDragGestures(
+                        onDragEnd = {
+                            if (dragOffsetY > 120f) {
+                                onCloseClick()
+                            }
+                            dragOffsetY = 0f
+                        },
+                        onDragCancel = {
+                            dragOffsetY = 0f
+                        },
+                        onVerticalDrag = { change, dragAmount ->
+                            change.consume()
+                            dragOffsetY = (dragOffsetY + dragAmount).coerceAtLeast(0f)
+                        }
+                    )
+                },
+            contentAlignment = Alignment.Center
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(42.dp)
+                    .height(4.dp)
+                    .clip(RoundedCornerShape(percent = 50))
+                    .background(MonochromeMuted)
+                    .clickable(
+                        interactionSource = remember { MutableInteractionSource() },
+                        indication = null
+                    ) {
+                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                        onCloseClick()
+                    }
+            )
+        }
 
-        Spacer(modifier = Modifier.height(14.dp))
+        Spacer(modifier = Modifier.height(10.dp))
 
         // Header: Queue title, track count, Actions
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 24.dp),
+                .padding(horizontal = 24.dp)
+                .pointerInput(Unit) {
+                    detectVerticalDragGestures(
+                        onDragEnd = {
+                            if (dragOffsetY > 120f) {
+                                onCloseClick()
+                            }
+                            dragOffsetY = 0f
+                        },
+                        onDragCancel = {
+                            dragOffsetY = 0f
+                        },
+                        onVerticalDrag = { change, dragAmount ->
+                            change.consume()
+                            dragOffsetY = (dragOffsetY + dragAmount).coerceAtLeast(0f)
+                        }
+                    )
+                },
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically
         ) {

@@ -1,14 +1,24 @@
 package com.example.auramusic.ui.main
 
 import android.widget.Toast
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -55,6 +65,7 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -126,6 +137,35 @@ fun MainScreen(
         val isEqualizerSheetVisible by viewModel.isEqualizerSheetVisible.collectAsState()
         val selectedCategory by viewModel.selectedCategory.collectAsState()
 
+        // System Back Navigation Handling across all sheets, dialogs, player, and tabs
+        BackHandler(enabled = isCreatePlaylistDialogVisible) {
+            viewModel.closeCreatePlaylistDialog()
+        }
+        BackHandler(enabled = !isCreatePlaylistDialogVisible && isAddToPlaylistSheetVisible) {
+            viewModel.closeAddToPlaylistSheet()
+        }
+        BackHandler(enabled = !isCreatePlaylistDialogVisible && !isAddToPlaylistSheetVisible && isSleepTimerDialogVisible) {
+            viewModel.closeSleepTimerDialog()
+        }
+        BackHandler(enabled = !isCreatePlaylistDialogVisible && !isAddToPlaylistSheetVisible && !isSleepTimerDialogVisible && isAlbumSheetVisible) {
+            viewModel.closeAlbumSheet()
+        }
+        BackHandler(enabled = !isCreatePlaylistDialogVisible && !isAddToPlaylistSheetVisible && !isSleepTimerDialogVisible && !isAlbumSheetVisible && isEqualizerSheetVisible) {
+            viewModel.closeEqualizerSheet()
+        }
+        BackHandler(enabled = !isCreatePlaylistDialogVisible && !isAddToPlaylistSheetVisible && !isSleepTimerDialogVisible && !isAlbumSheetVisible && !isEqualizerSheetVisible && isAudioRouteSheetVisible) {
+            viewModel.closeAudioRouteSheet()
+        }
+        BackHandler(enabled = !isCreatePlaylistDialogVisible && !isAddToPlaylistSheetVisible && !isSleepTimerDialogVisible && !isAlbumSheetVisible && !isEqualizerSheetVisible && !isAudioRouteSheetVisible && isQueueVisible) {
+            viewModel.setQueueVisible(false)
+        }
+        BackHandler(enabled = !isCreatePlaylistDialogVisible && !isAddToPlaylistSheetVisible && !isSleepTimerDialogVisible && !isAlbumSheetVisible && !isEqualizerSheetVisible && !isAudioRouteSheetVisible && !isQueueVisible && isExpandedPlayer) {
+            viewModel.setExpandedPlayer(false)
+        }
+        BackHandler(enabled = !isCreatePlaylistDialogVisible && !isAddToPlaylistSheetVisible && !isSleepTimerDialogVisible && !isAlbumSheetVisible && !isEqualizerSheetVisible && !isAudioRouteSheetVisible && !isQueueVisible && !isExpandedPlayer && currentTab != PixelNavTab.HOME) {
+            viewModel.setNavTab(PixelNavTab.HOME)
+        }
+
         val sourceFilterChips = listOf("All Tracks", "Spotify", "YouTube Music", "Lossless FLAC", "Albums")
         val genreExploreChips = listOf("All", "Top Hits", "Pop", "Rock", "Lo-Fi", "Hip-Hop", "Electronic", "Ambient", "Classical")
 
@@ -157,16 +197,43 @@ fun MainScreen(
                     onAudioRouteClick = { viewModel.openAudioRouteSheet() }
                 )
 
-                // Main Scrollable Area per Active Tab
-                LazyColumn(
-                    modifier = Modifier.fillMaxWidth().weight(1f),
-                    contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 150.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp)
-                ) {
-                    // ==========================================
-                    // 1. HOME TAB (Recommendations & Soundscapes)
-                    // ==========================================
-                    if (currentTab == PixelNavTab.HOME) {
+                // Main Screen Content Area with Expressive Fluid Tab Transitions
+                AnimatedContent(
+                    targetState = currentTab,
+                    transitionSpec = {
+                        val direction = if (targetState.ordinal > initialState.ordinal) 1 else -1
+                        (slideInHorizontally(
+                            initialOffsetX = { fullWidth -> direction * (fullWidth / 4) },
+                            animationSpec = spring(
+                                dampingRatio = Spring.DampingRatioLowBouncy,
+                                stiffness = Spring.StiffnessMediumLow
+                            )
+                        ) + fadeIn(
+                            animationSpec = tween(240, easing = FastOutSlowInEasing)
+                        )).togetherWith(
+                            slideOutHorizontally(
+                                targetOffsetX = { fullWidth -> -direction * (fullWidth / 4) },
+                                animationSpec = spring(
+                                    dampingRatio = Spring.DampingRatioNoBouncy,
+                                    stiffness = Spring.StiffnessMediumLow
+                                )
+                            ) + fadeOut(
+                                animationSpec = tween(180, easing = FastOutSlowInEasing)
+                            )
+                        )
+                    },
+                    label = "tabScreenTransition",
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .weight(1f)
+                ) { targetTab ->
+                    LazyColumn(
+                        modifier = Modifier.fillMaxSize(),
+                        contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 150.dp),
+                        verticalArrangement = Arrangement.spacedBy(16.dp)
+                    ) {
+                        when (targetTab) {
+                            PixelNavTab.HOME -> {
                         val currentTrack = playerState.currentTrack
 
                         if (currentTrack != null) {
@@ -386,7 +453,7 @@ fun MainScreen(
                     // ========================================================
                     // 2. SEARCH TAB (Rich Discovery, Trending Searches & Full Streaming)
                     // ========================================================
-                    else if (currentTab == PixelNavTab.SEARCH) {
+                    PixelNavTab.SEARCH -> {
                         // Search Bar Input
                         item {
                             Box(
@@ -727,7 +794,7 @@ fun MainScreen(
                     // ==========================================
                     // 3. LIBRARY TAB (Custom Playlists & Albums)
                     // ==========================================
-                    else if (currentTab == PixelNavTab.LIBRARY) {
+                    PixelNavTab.LIBRARY -> {
                         item {
                             Row(
                                 verticalAlignment = Alignment.CenterVertically,
@@ -906,7 +973,7 @@ fun MainScreen(
                     // ==========================================
                     // 4. SETTINGS TAB (Preferences & Mode Switch)
                     // ==========================================
-                    else if (currentTab == PixelNavTab.SETTINGS) {
+                    PixelNavTab.SETTINGS -> {
                         item {
                             Text(
                                 text = "Settings & Preferences",
@@ -1502,6 +1569,8 @@ fun MainScreen(
                     }
                 }
             }
+        }
+    }
 
             // Floating Pixel Mini Player Bar
             AnimatedVisibility(
@@ -1533,11 +1602,39 @@ fun MainScreen(
                 modifier = Modifier.align(Alignment.BottomCenter)
             )
 
-            // Fullscreen Google Pixel Expanded Player Screen
+            // Dimming Scrim for Expanded Player Bottom Attached Screen
             AnimatedVisibility(
                 visible = isExpandedPlayer,
-                enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
-                exit = slideOutVertically(targetOffsetY = { it }) + fadeOut()
+                enter = fadeIn(animationSpec = tween(220)),
+                exit = fadeOut(animationSpec = tween(200)),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.65f))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) {
+                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                            viewModel.setExpandedPlayer(false)
+                        }
+                )
+            }
+
+            // Google Pixel Bottom-Attached Expanded Player Screen
+            AnimatedVisibility(
+                visible = isExpandedPlayer,
+                enter = slideInVertically(
+                    initialOffsetY = { it },
+                    animationSpec = spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow)
+                ) + fadeIn(animationSpec = tween(200)),
+                exit = slideOutVertically(
+                    targetOffsetY = { it },
+                    animationSpec = spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow)
+                ) + fadeOut(animationSpec = tween(180)),
+                modifier = Modifier.align(Alignment.BottomCenter)
             ) {
                 PixelExpandedPlayer(
                     playerState = playerState,
@@ -1559,11 +1656,38 @@ fun MainScreen(
                 )
             }
 
-            // Up Next Queue Bottom Sheet
+            // Dimming Scrim for Up Next Queue Sheet
             AnimatedVisibility(
                 visible = isQueueVisible,
-                enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
-                exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
+                enter = fadeIn(animationSpec = tween(220)),
+                exit = fadeOut(animationSpec = tween(200)),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.65f))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) {
+                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                            viewModel.setQueueVisible(false)
+                        }
+                )
+            }
+
+            // Up Next Queue Bottom Attached Sheet
+            AnimatedVisibility(
+                visible = isQueueVisible,
+                enter = slideInVertically(
+                    initialOffsetY = { it },
+                    animationSpec = spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow)
+                ) + fadeIn(animationSpec = tween(200)),
+                exit = slideOutVertically(
+                    targetOffsetY = { it },
+                    animationSpec = spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow)
+                ) + fadeOut(animationSpec = tween(180)),
                 modifier = Modifier.align(Alignment.BottomCenter)
             ) {
                 PixelQueueSheet(
