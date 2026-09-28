@@ -25,6 +25,7 @@ This document provides a record of all features, architectural milestones, UI/UX
 | **FEAT-028** | Complete Component Functionality & Hardware Integration | Feature Completion & Hardware | `COMPLETE` | Motorola Edge 50 Pro | 2026-09-28 |
 | **FEAT-029** | Auto Audio Streaming Quality Switching on Signal Fluctuation | Audio Engine & Network ABR | `COMPLETE` | Motorola Edge 50 Pro | 2026-09-28 |
 | **FEAT-030** | Dual-Mode Audio Equalizer (AI-Assisted & Manual Graphic) | Audio DSP & UI | `COMPLETE` | Motorola Edge 50 Pro | 2026-09-28 |
+| **FEAT-031** | Full-Length Online Music Engine, Home Recommendations & Rich Search Discovery | Audio Streaming & UI | `COMPLETE` | Motorola Edge 50 Pro | 2026-09-28 |
 
 ---
 
@@ -682,6 +683,50 @@ This document provides a record of all features, architectural milestones, UI/UX
     - `aura_equalizer_opened.png`: `PixelEqualizerSheet` in AI-Assisted mode showing Bézier spline, rationale card, and target chips.
     - `aura_equalizer_manual.png`: `PixelEqualizerSheet` in Manual Graphic mode with 5 vertical squircle sliders (-12dB to +12dB), curve, bass boost & virtualizer.
     - `aura_equalizer_flat.png`: Preset switching verified live on Motorola display.
+
+---
+
+### [FEAT-031] Full-Length Online Music Engine, Home Recommendations & Rich Search Discovery
+- **Date**: 2026-09-28
+- **Category**: Audio Streaming & Discovery UI
+- **Author/Agent**: Antigravity AI
+- **Files Affected**:
+  - `app/src/main/java/com/example/auramusic/network/OnlineMusicSearchService.kt`
+  - `app/src/main/java/com/example/auramusic/recommendation/RecommendationEngine.kt`
+  - `app/src/main/java/com/example/auramusic/ui/main/MainScreenViewModel.kt`
+  - `app/src/main/java/com/example/auramusic/ui/components/PixelTrackTile.kt`
+  - `app/src/main/java/com/example/auramusic/ui/main/MainScreen.kt`
+  - `app/src/test/java/com/example/auramusic/network/OnlineMusicSearchServiceTest.kt`
+- **Description**:
+  Addressed the 3 core audio and discovery enhancements requested by the user:
+  1. **Full-Length Online Lossless Music Engine**:
+     - Identified root cause of partial song playback: previous implementation queried iTunes Search API whose `previewUrl` is hardcoded to a 30-second AAC sample clip.
+     - Implemented direct 320kbps full-track streaming via JioSaavn's JSON API (`search.getResults`, `search.getAlbumResults`, `content.getHomepageData`, `content.getAlbumDetails`).
+     - Added on-device DES decryption (`DES/ECB/PKCS5Padding`, key `"38346591"`) decrypting `encrypted_media_url` into direct, complete 320kbps CDN stream URLs (`https://aac.saavncdn.com/..._320.mp4`).
+     - Added robust artist parsing (`parseArtistName`) handling both strings and nested JSON arrays/objects from `artistMap`.
+     - Added HTML entity decoding (`cleanText`) stripping entities like `&quot;`, `&#039;`, `&amp;`.
+     - Added lazy track loading (`fetchAlbumTracks`) when opening online albums.
+  2. **Personalized & Trending Recommendations on Home Tab**:
+     - Home tab transformed from an empty-state clean screen into a dynamic, personalized music hub.
+     - Dynamically queries trending music (`fetchTrendingMusic`) upon startup, populating albums and tracks.
+     - Features `Recommended For You`, `Trending on Spotify`, `Hot on YouTube Music`, and `Lossless Masterworks` sections.
+     - Includes interactive quick-mood chips (`All Recommendations`, `Focus & Study`, `Lofi Chill`, `Cinematic`, `Bass Punch`, `Acoustic`, `Rock`) to filter recommendations dynamically.
+     - Includes curated fallback catalog (`curatedFallbackTracks`, `curatedFallbackAlbums`) with verified 320k stream URLs and colorful artwork.
+  3. **Rich Search Discovery Portal**:
+     - Search tab enhanced with engaging content when the query is empty rather than showing a blank canvas.
+     - Features `TRENDING SEARCHES` horizontal chip carousel (*Hans Zimmer*, *Believer*, *Arijit Singh*, *Daft Punk*, *Taylor Swift*, *Interstellar*, *Anirudh*).
+     - Features `BROWSE GENRES & MOODS` 2-column squircle grid (*Pop Hits*, *Electronic*, *Rock & Indie*, *Lofi Chill*, *Bollywood*, *Hip-Hop*, *Cinematic*, *Acoustic*).
+     - Tapping any chip or genre instantly triggers a search and renders live albums and songs.
+  4. **Pixel M3 Track Tile Layout Stabilization**:
+     - Constrained artist `Text` with `Modifier.weight(1f, fill = false)` inside `PixelTrackTile.kt`, preventing long artist names from squeezing badges and durations into vertical text wrapping.
+- **Verification**:
+  - Unit tests: `OnlineMusicSearchServiceTest.kt` passed 100% (`BUILD SUCCESSFUL`).
+  - Debug APK built and installed on Motorola Edge 50 Pro (`ZD222MKB8C`).
+  - Screen captures verified on device:
+    - `aura_home_verified.png`: Home tab with `Recommended For You`, 320K Lossless album carousels, and pristine track tiles with zero wrapping.
+    - `aura_search_tab.png`: Search tab with `TRENDING SEARCHES` pills and `BROWSE GENRES & MOODS` squircle grid.
+    - `aura_believer_search.png`: Tapping `Believer` loaded 12 matching albums and 4 full-length songs.
+    - `aura_playback_test.png` & `aura_expanded_player.png`: Verified playback at 1:17 / 4:12 on track *Vaaroon Forever*, confirming full-length audio streaming past the 30-second mark.
 
 ---
 
