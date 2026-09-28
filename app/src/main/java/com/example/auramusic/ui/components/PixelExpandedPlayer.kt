@@ -187,14 +187,32 @@ fun PixelExpandedPlayer(
                     overflow = TextOverflow.Ellipsis
                 )
                 Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = track.artist,
-                    fontSize = 15.sp,
-                    fontWeight = FontWeight.Normal,
-                    color = MonochromeSilver,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        text = track.artist,
+                        fontSize = 15.sp,
+                        fontWeight = FontWeight.Normal,
+                        color = MonochromeSilver,
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
+                    )
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(MonochromeSurfaceHighest)
+                            .border(1.dp, MonochromeOutline, RoundedCornerShape(6.dp))
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = track.qualityBadge,
+                            fontSize = 9.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MonochromeWhite,
+                            letterSpacing = 0.6.sp
+                        )
+                    }
+                }
             }
 
             IconButton(
@@ -214,9 +232,10 @@ fun PixelExpandedPlayer(
 
         Spacer(modifier = Modifier.height(14.dp))
 
-        // 4. Pixel Dynamic Squiggly Wavy Seekbar
+        // 4. Pixel Dynamic Squiggly Wavy Seekbar with Travel Buffer
         PixelSquigglySeekbar(
             progress = playerState.progress,
+            bufferedProgress = playerState.bufferedProgress,
             isPlaying = playerState.isPlaying,
             onSeek = onSeek,
             activeColor = MonochromeWhite,

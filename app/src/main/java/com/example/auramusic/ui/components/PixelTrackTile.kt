@@ -169,6 +169,21 @@ fun PixelTrackTile(
                     overflow = TextOverflow.Ellipsis
                 )
                 Spacer(modifier = Modifier.width(6.dp))
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(4.dp))
+                        .background(MonochromeSurfaceContainer)
+                        .border(0.5.dp, MonochromeOutlineVariant, RoundedCornerShape(4.dp))
+                        .padding(horizontal = 4.dp, vertical = 1.dp)
+                ) {
+                    Text(
+                        text = track.qualityBadge,
+                        fontSize = 8.sp,
+                        fontWeight = FontWeight.Bold,
+                        color = MonochromeWhite
+                    )
+                }
+                Spacer(modifier = Modifier.width(6.dp))
                 Text(
                     text = "•",
                     fontSize = 10.sp,
