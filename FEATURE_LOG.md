@@ -873,6 +873,37 @@ This document provides a record of all features, architectural milestones, UI/UX
 
 ---
 
+### [FEAT-036] Android System Quick Settings & Lock Screen Media Player
+- **Date**: 2026-09-28
+- **Category**: Android System Integration & Background Media
+- **Status**: `COMPLETE`
+- **Files Affected**:
+  - `app/src/main/AndroidManifest.xml`
+  - `app/src/main/java/com/example/auramusic/MainActivity.kt`
+  - `app/src/main/java/com/example/auramusic/player/MusicPlayerManager.kt`
+  - `app/src/main/java/com/example/auramusic/service/AuraMediaService.kt`
+  - `app/src/main/java/com/example/auramusic/ui/main/MainScreenViewModel.kt`
+- **Description**:
+  Implemented native Android System Media Controls (MediaSession / Quick Settings carousel & Lock Screen player):
+  1. **AndroidX Media3 MediaSession Integration**:
+     - Configured `MediaSession.Builder` linked directly to `ExoPlayer` in `MusicPlayerManager.kt`.
+     - Attached `sessionActivityPendingIntent` routing directly to `MainActivity` on notification click.
+     - Handled `Player.COMMAND_SEEK_TO_NEXT` and `COMMAND_SEEK_TO_PREVIOUS` in `MediaSession.Callback` for hardware and notification skip controls.
+     - Handled `onPositionDiscontinuity` in `Player.Listener` to keep app UI seekbar in sync when users scrub Android's wavy seekbar.
+  2. **High-Resolution Metadata Streaming**:
+     - Built `androidx.media3.common.MediaMetadata` with `title`, `artist`, `albumTitle`, and `artworkUri` on every track change.
+     - Android automatically extracts palette colors and paints the lock screen / notification shade background with album artwork.
+  3. **Foreground Media Session Service (`AuraMediaService`)**:
+     - Created `AuraMediaService` extending AndroidX Media3 `MediaSessionService`.
+     - Declared service in `AndroidManifest.xml` with `android:foregroundServiceType="mediaPlayback"`.
+     - Added permissions: `FOREGROUND_SERVICE`, `FOREGROUND_SERVICE_MEDIA_PLAYBACK`, and `POST_NOTIFICATIONS`.
+     - Added runtime `POST_NOTIFICATIONS` check in `MainActivity.kt` for Android 13+ devices.
+     - Clean lifecycle handling: service starts on playback, automatically releases session on destruction, and stops when task is removed and playback is paused.
+- **Verification**:
+  - Successfully compiled via `./gradlew.bat compileDebugKotlin` and verified APK assembly with `./gradlew.bat assembleDebug` (Build Successful in 1m 14s).
+
+---
+
 ## 3. Change Tracking Guidelines for New Features
 
 When adding or modifying features in the future, append an entry following this format:

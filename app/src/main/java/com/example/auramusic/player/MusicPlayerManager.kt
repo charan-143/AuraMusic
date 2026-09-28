@@ -1,16 +1,24 @@
 package com.example.auramusic.player
 
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
 import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.net.Uri
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import androidx.media3.common.MediaItem
+import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import androidx.media3.session.MediaSession
+import androidx.media3.session.SessionResult
+import com.example.auramusic.MainActivity
+import com.example.auramusic.service.AuraMediaService
 import com.example.auramusic.audio.EqualizerManager
 import com.example.auramusic.cache.AdaptiveAudioCacheManager
 import com.example.auramusic.model.AudioBitrateMode
@@ -28,13 +36,24 @@ import kotlinx.coroutines.launch
 
 class MusicPlayerManager(private val context: Context) {
 
+    companion object {
+        @Volatile
+        private var instance: MusicPlayerManager? = null
+
+        fun getInstance(context: Context): MusicPlayerManager {
+            return instance ?: synchronized(this) {
+                instance ?: MusicPlayerManager(context.applicationContext).also { instance = it }
+            }
+        }
+    }
+
     private val scope = CoroutineScope(Dispatchers.Main + Job())
     private var positionTickerJob: Job? = null
 
     val cacheManager by lazy { AdaptiveAudioCacheManager(context) }
     val equalizerManager by lazy { EqualizerManager(context) }
 
-    private val exoPlayer: ExoPlayer by lazy {
+    val exoPlayer: ExoPlayer by lazy {
         val mediaSourceFactory = DefaultMediaSourceFactory(cacheManager.cacheDataSourceFactory)
         val loadControl = cacheManager.createTravelLoadControl()
 
@@ -72,8 +91,70 @@ class MusicPlayerManager(private val context: Context) {
                             skipNext()
                         }
                     }
+
+                    override fun onPositionDiscontinuity(
+                        oldPosition: Player.PositionInfo,
+                        newPosition: Player.PositionInfo,
+                        reason: Int
+                    ) {
+                        _playerState.update {
+                            it.copy(
+                                currentPositionMs = newPosition.positionMs,
+                                bufferedPositionMs = exoPlayer.bufferedPosition
+                            )
+                        }
+                    }
                 })
             }
+    }
+
+    val mediaSession: MediaSession by lazy {
+        val sessionActivityPendingIntent = PendingIntent.getActivity(
+            context,
+            0,
+            Intent(context, MainActivity::class.java).apply {
+                flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+            },
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+        )
+
+        MediaSession.Builder(context, exoPlayer)
+            .setSessionActivity(sessionActivityPendingIntent)
+            .setCallback(object : MediaSession.Callback {
+                @Deprecated("Deprecated in Java")
+                @Suppress("DEPRECATION")
+                override fun onPlayerCommandRequest(
+                    session: MediaSession,
+                    controller: MediaSession.ControllerInfo,
+                    playerCommand: Int
+                ): Int {
+                    when (playerCommand) {
+                        Player.COMMAND_SEEK_TO_NEXT, Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM -> {
+                            scope.launch { skipNext() }
+                            return SessionResult.RESULT_SUCCESS
+                        }
+                        Player.COMMAND_SEEK_TO_PREVIOUS, Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM -> {
+                            scope.launch { skipPrevious() }
+                            return SessionResult.RESULT_SUCCESS
+                        }
+                    }
+                    return super.onPlayerCommandRequest(session, controller, playerCommand)
+                }
+            })
+            .build()
+    }
+
+    private fun startMediaPlaybackService() {
+        try {
+            val intent = Intent(context, AuraMediaService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+        } catch (e: Exception) {
+            // safe fallback
+        }
     }
 
     private val audioManager = context.getSystemService(Context.AUDIO_SERVICE) as? AudioManager
@@ -89,6 +170,7 @@ class MusicPlayerManager(private val context: Context) {
     }
 
     init {
+        instance = this
         try {
             audioManager?.registerAudioDeviceCallback(audioDeviceCallback, Handler(Looper.getMainLooper()))
         } catch (e: Exception) {
@@ -163,10 +245,23 @@ class MusicPlayerManager(private val context: Context) {
             try {
                 exoPlayer.stop()
                 exoPlayer.clearMediaItems()
-                val mediaItem = MediaItem.fromUri(Uri.parse(track.audioUrl))
+                val mediaMetadata = MediaMetadata.Builder()
+                    .setTitle(track.title)
+                    .setArtist(track.artist)
+                    .setAlbumTitle(track.album)
+                    .setArtworkUri(if (track.coverArtUrl.isNotBlank()) Uri.parse(track.coverArtUrl) else null)
+                    .build()
+
+                val mediaItem = MediaItem.Builder()
+                    .setUri(Uri.parse(track.audioUrl))
+                    .setMediaId(track.id)
+                    .setMediaMetadata(mediaMetadata)
+                    .build()
+
                 exoPlayer.setMediaItem(mediaItem)
                 exoPlayer.prepare()
                 exoPlayer.play()
+                startMediaPlaybackService()
             } catch (e: Exception) {
                 // Fallback to simulated playback ticker if stream error occurs
                 startTicker()
@@ -203,6 +298,7 @@ class MusicPlayerManager(private val context: Context) {
         val track = _playerState.value.currentTrack
         if (track != null && track.audioUrl.isNotBlank() && exoPlayer.playbackState != Player.STATE_IDLE) {
             exoPlayer.play()
+            startMediaPlaybackService()
         } else {
             _playerState.update { it.copy(isPlaying = true) }
             startTicker()
@@ -582,6 +678,11 @@ class MusicPlayerManager(private val context: Context) {
         stopTicker()
         try {
             audioManager?.unregisterAudioDeviceCallback(audioDeviceCallback)
+        } catch (e: Exception) {
+            // safe fallback
+        }
+        try {
+            mediaSession.release()
         } catch (e: Exception) {
             // safe fallback
         }
