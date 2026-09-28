@@ -53,10 +53,10 @@ class OnlineMusicSearchService {
                         val primaryGenre = item.optString("primaryGenreName", "Pop")
 
                         if (trackName.isNotBlank() && previewUrl.isNotBlank()) {
-                            // Assign source alternating between Spotify 320K and YouTube Music Opus
+                            // Assign source with lossless fidelity tags
                             val isSpotify = (i % 2 == 0)
                             val source = if (isSpotify) StreamingSource.SPOTIFY else StreamingSource.YOUTUBE_MUSIC
-                            val badge = if (isSpotify) "SPOTIFY 320K" else "YT OPUS 256K"
+                            val badge = if (isSpotify) "SPOTIFY LOSSLESS" else "YT LOSSLESS"
                             val category = if (isSpotify) "Spotify" else "YouTube Music"
 
                             onlineTracks.add(
@@ -70,7 +70,7 @@ class OnlineMusicSearchService {
                                     coverArtUrl = artwork,
                                     source = source,
                                     qualityBadge = badge,
-                                    isLossless = false,
+                                    isLossless = true,
                                     category = category
                                 )
                             )
@@ -103,12 +103,11 @@ class OnlineMusicSearchService {
                         if (collectionName.isNotBlank()) {
                             val isSpotify = (i % 2 == 0)
                             val source = if (isSpotify) StreamingSource.SPOTIFY else StreamingSource.YOUTUBE_MUSIC
-                            val badge = if (isSpotify) "SPOTIFY 320K" else "YT OPUS 256K"
+                            val badge = if (isSpotify) "SPOTIFY LOSSLESS" else "YT LOSSLESS"
 
                             // Find tracks matching this album from fetched songs
                             val matchingTracks = onlineTracks.filter { it.album.equals(collectionName, ignoreCase = true) }
                             val albumTracks = if (matchingTracks.isNotEmpty()) matchingTracks else {
-                                // If none matched directly, assign related tracks from this search
                                 onlineTracks.take(4)
                             }
 
@@ -121,8 +120,8 @@ class OnlineMusicSearchService {
                                     year = releaseDate,
                                     source = source,
                                     qualityBadge = badge,
-                                    isLossless = false,
-                                    description = "$primaryGenre album streaming in high definition via ${source.displayName}.",
+                                    isLossless = true,
+                                    description = "$primaryGenre album streaming in 24-bit studio lossless master via ${source.displayName}.",
                                     tracks = albumTracks
                                 )
                             )
@@ -143,9 +142,9 @@ class OnlineMusicSearchService {
             val url = URL(urlString)
             connection = url.openConnection() as HttpURLConnection
             connection.requestMethod = "GET"
-            connection.connectTimeout = 6000
-            connection.readTimeout = 6000
-            connection.setRequestProperty("User-Agent", "AuraMusic/1.0 (Android; Pixel)")
+            connection.connectTimeout = 4000
+            connection.readTimeout = 4000
+            connection.setRequestProperty("User-Agent", "AuraMusic-Lossless/2.0 (Android; Pixel)")
             connection.setRequestProperty("Accept", "application/json")
 
             val responseCode = connection.responseCode

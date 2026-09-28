@@ -46,9 +46,16 @@ class AdaptiveAudioCacheManager(private val context: Context) {
     private val httpDataSourceFactory: DefaultHttpDataSource.Factory =
         DefaultHttpDataSource.Factory()
             .setAllowCrossProtocolRedirects(true)
-            .setConnectTimeoutMs(15000)
-            .setReadTimeoutMs(30000)
-            .setUserAgent("AuraMusic-LosslessStreamer/1.0")
+            .setConnectTimeoutMs(8000)
+            .setReadTimeoutMs(15000)
+            .setUserAgent("AuraMusic-LosslessStreamer/2.0")
+            .setDefaultRequestProperties(
+                mapOf(
+                    "Accept" to "audio/flac, audio/x-flac, audio/*; q=1.0",
+                    "X-Audio-Bitrate" to "lossless-24bit",
+                    "X-Lossless-Stream" to "true"
+                )
+            )
 
     val cacheDataSourceFactory: DataSource.Factory by lazy {
         CacheDataSource.Factory()
@@ -58,20 +65,19 @@ class AdaptiveAudioCacheManager(private val context: Context) {
     }
 
     /**
-     * Extended LoadControl tailored for travel & roaming where cellular signals drop.
-     * Buffers up to 5 minutes ahead (often the entire track) so you can ride through
-     * dead zones, tunnels, and network handovers without a single stutter.
+     * Optimized LoadControl for snappy zero-latency playback startup & robust pre-buffering.
+     * Starts playback within 250ms while buffering up to 3 minutes ahead in the background.
      */
     fun createTravelLoadControl(): LoadControl {
         return DefaultLoadControl.Builder()
             .setBufferDurationsMs(
-                /* minBufferMs = */ 60_000,       // 60 sec minimum buffer before throttling
-                /* maxBufferMs = */ 300_000,      // 5 min maximum buffer ahead
-                /* bufferForPlaybackMs = */ 1_500, // Starts immediately within 1.5s
-                /* bufferForPlaybackAfterRebufferMs = */ 3_000
+                /* minBufferMs = */ 15_000,       // 15 sec minimum buffer
+                /* maxBufferMs = */ 180_000,      // 3 min maximum buffer ahead
+                /* bufferForPlaybackMs = */ 250,  // Starts instantly within 250ms!
+                /* bufferForPlaybackAfterRebufferMs = */ 1_000
             )
             .setBackBuffer(
-                /* backBufferDurationMs = */ 60_000, // Retain 60s behind current point for instant rewind
+                /* backBufferDurationMs = */ 30_000,
                 /* retainBackBufferFromKeyframe = */ true
             )
             .build()

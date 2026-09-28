@@ -185,10 +185,17 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
             }
         }
 
-        // When current track changes, refresh recommendations
+        // When current track ID actually changes, refresh recommendations
         viewModelScope.launch {
+            var lastTrackId: String? = null
             playerState.collect { state ->
-                state.currentTrack?.let { refreshRecommendations(it) }
+                val track = state.currentTrack
+                if (track?.id != lastTrackId) {
+                    lastTrackId = track?.id
+                    if (track != null) {
+                        refreshRecommendations(track)
+                    }
+                }
             }
         }
 
@@ -347,7 +354,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
 
             if (query.trim().length >= 2) {
                 searchJob = viewModelScope.launch {
-                    delay(350)
+                    delay(200)
                     _isSearchingOnline.value = true
                     try {
                         val result = onlineSearchService.searchOnline(query.trim())
