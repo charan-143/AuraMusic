@@ -120,7 +120,8 @@
     </div>
 
     <!-- Floating Pixel Mini Player Bar -->
-    <div id="miniPlayer" onclick="openExpandedPlayer()" class="absolute bottom-4 left-4 right-4 bg-[#161616] border border-[#2c2c2c] rounded-3xl p-2.5 px-3 flex items-center space-x-3 cursor-pointer pixel-shadow transition-transform hover:scale-[1.01] active:scale-[0.99] z-30">
+        <!-- Floating Pixel Mini Player Bar (Positioned gracefully above bottom nav) -->
+    <div id="miniPlayer" onclick="openExpandedPlayer()" class="absolute bottom-[68px] left-4 right-4 bg-[#161616] border border-[#2c2c2c] rounded-3xl p-2.5 px-3 flex items-center space-x-3 cursor-pointer pixel-shadow transition-transform hover:scale-[1.01] active:scale-[0.99] z-30">
       <div class="w-11 h-11 bg-[#222] rounded-xl overflow-hidden flex-shrink-0 border border-[#333]">
         <img id="miniCover" src="" class="w-full h-full object-cover filter grayscale">
       </div>
@@ -136,6 +137,37 @@
           <svg class="w-5 h-5 fill-current" viewBox="0 0 24 24"><path d="M6 18l8.5-6L6 6v12zM16 6v12h2V6h-2z"/></svg>
         </button>
       </div>
+    </div>
+
+    <!-- Google Pixel Navigation Tabs Down (Bottom Navigation Bar) -->
+    <div class="absolute bottom-0 left-0 right-0 h-16 bg-[#000000] border-t border-[#1f1f1f] rounded-t-3xl flex items-center justify-around px-4 z-30">
+      <button onclick="switchTab('Home')" id="navTab_Home" class="flex flex-col items-center py-1 transition-all">
+        <div class="w-12 h-7 rounded-2xl bg-white text-black flex items-center justify-center mb-0.5">
+          <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>
+        </div>
+        <span class="text-[10px] font-bold text-white">Home</span>
+      </button>
+
+      <button onclick="switchTab('ForYou')" id="navTab_ForYou" class="flex flex-col items-center py-1 text-[#888] hover:text-white transition-all">
+        <div class="w-12 h-7 rounded-2xl flex items-center justify-center mb-0.5">
+          <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M19 9l1.25-2.75L23 5l-2.75-1.25L19 1l-1.25 2.75L15 5l2.75 1.25L19 9zm-7.5.5L9 4 6.5 9.5 1 12l5.5 2.5L9 20l2.5-5.5L17 12l-5.5-2.5z"/></svg>
+        </div>
+        <span class="text-[10px] font-medium text-[#888]">For You</span>
+      </button>
+
+      <button onclick="switchTab('Search')" id="navTab_Search" class="flex flex-col items-center py-1 text-[#888] hover:text-white transition-all">
+        <div class="w-12 h-7 rounded-2xl flex items-center justify-center mb-0.5">
+          <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 14z"/></svg>
+        </div>
+        <span class="text-[10px] font-medium text-[#888]">Search</span>
+      </button>
+
+      <button onclick="switchTab('Library')" id="navTab_Library" class="flex flex-col items-center py-1 text-[#888] hover:text-white transition-all">
+        <div class="w-12 h-7 rounded-2xl flex items-center justify-center mb-0.5">
+          <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm-2 10h-4v4h-2v-4H8v-2h4V6h2v4h4v2z"/></svg>
+        </div>
+        <span class="text-[10px] font-medium text-[#888]">Library</span>
+      </button>
     </div>
 
     <!-- Fullscreen Google Pixel Expanded Player Overlay -->
@@ -477,6 +509,37 @@
         });
         alert("Created " + (isAlbum ? "Custom Album: " : "Playlist: ") + name);
         renderTrackList(); renderAlbums();
+      }
+    }
+
+
+    let currentNavTab = "Home";
+    function switchTab(tab) {
+      currentNavTab = tab;
+      const tabs = ["Home", "ForYou", "Search", "Library"];
+      tabs.forEach(t => {
+        const btn = document.getElementById("navTab_" + t);
+        if (btn) {
+          const pill = btn.querySelector("div");
+          const label = btn.querySelector("span");
+          if (t === tab) {
+            pill.className = "w-12 h-7 rounded-2xl bg-white text-black flex items-center justify-center mb-0.5";
+            label.className = "text-[10px] font-bold text-white";
+          } else {
+            pill.className = "w-12 h-7 rounded-2xl flex items-center justify-center mb-0.5 text-[#888]";
+            label.className = "text-[10px] font-medium text-[#888]";
+          }
+        }
+      });
+
+      if (tab === "Home") {
+        setCategory("All Tracks");
+      } else if (tab === "ForYou") {
+        setCategory("Recommendations");
+      } else if (tab === "Search") {
+        document.getElementById("searchInput").focus();
+      } else if (tab === "Library") {
+        setCategory("My Playlists");
       }
     }
 

@@ -34,6 +34,9 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     val networkStatus = networkObserver.networkStatus
     val playlists: StateFlow<List<Playlist>> = playlistRepository.playlists
 
+    private val _currentTab = MutableStateFlow(com.example.auramusic.ui.components.PixelNavTab.HOME)
+    val currentTab: StateFlow<com.example.auramusic.ui.components.PixelNavTab> = _currentTab.asStateFlow()
+
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
 
@@ -281,12 +284,33 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
 
     fun setPlaybackSpeed(speed: Float) = playerManager.setPlaybackSpeed(speed)
 
+    fun setNavTab(tab: com.example.auramusic.ui.components.PixelNavTab) {
+        _currentTab.value = tab
+        when (tab) {
+            com.example.auramusic.ui.components.PixelNavTab.HOME -> {
+                _selectedCategory.value = "All Tracks"
+            }
+            com.example.auramusic.ui.components.PixelNavTab.FOR_YOU -> {
+                _selectedCategory.value = "Recommendations"
+            }
+            com.example.auramusic.ui.components.PixelNavTab.SEARCH -> {
+                // Keep search active
+            }
+            com.example.auramusic.ui.components.PixelNavTab.LIBRARY -> {
+                _selectedCategory.value = "My Playlists"
+            }
+        }
+    }
+
     fun setCategory(category: String) {
         _selectedCategory.value = category
     }
 
     fun setSearchQuery(query: String) {
         _searchQuery.value = query
+        if (query.isNotBlank() && _currentTab.value != com.example.auramusic.ui.components.PixelNavTab.SEARCH) {
+            _currentTab.value = com.example.auramusic.ui.components.PixelNavTab.SEARCH
+        }
     }
 
     fun setExpandedPlayer(expanded: Boolean) {

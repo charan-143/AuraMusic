@@ -11,11 +11,13 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
@@ -66,10 +68,12 @@ import com.example.auramusic.ui.components.PixelAddToPlaylistSheet
 import com.example.auramusic.ui.components.PixelAlbumCard
 import com.example.auramusic.ui.components.PixelAlbumDetailSheet
 import com.example.auramusic.ui.components.PixelAtAGlanceHeader
+import com.example.auramusic.ui.components.PixelBottomNavBar
 import com.example.auramusic.ui.components.PixelCreatePlaylistDialog
 import com.example.auramusic.ui.components.PixelExpandedPlayer
 import com.example.auramusic.ui.components.PixelFilterChips
 import com.example.auramusic.ui.components.PixelMiniPlayer
+import com.example.auramusic.ui.components.PixelNavTab
 import com.example.auramusic.ui.components.PixelQueueSheet
 import com.example.auramusic.ui.components.PixelSquircleAlbumArt
 import com.example.auramusic.ui.components.PixelTrackTile
@@ -80,6 +84,7 @@ fun MainScreen(
     viewModel: MainScreenViewModel = viewModel()
 ) {
     val playerState by viewModel.playerState.collectAsStateWithLifecycle()
+    val currentTab by viewModel.currentTab.collectAsStateWithLifecycle()
     val searchQuery by viewModel.searchQuery.collectAsStateWithLifecycle()
     val selectedCategory by viewModel.selectedCategory.collectAsStateWithLifecycle()
     val tracks by viewModel.filteredTracks.collectAsStateWithLifecycle()
@@ -101,115 +106,181 @@ fun MainScreen(
             .fillMaxSize()
             .background(MonochromeBlack)
     ) {
-        // Main Scrollable Home View
+        // Main Screen View
         Column(
             modifier = Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
         ) {
-            // 1. Google Pixel At-a-Glance Widget Header with Travel Shield & Quality Badge
-            PixelAtAGlanceHeader(
-                isPlaying = playerState.isPlaying,
-                activeTrackTitle = playerState.currentTrack?.title,
-                networkStatusText = playerState.networkStatusText,
-                qualityBadge = playerState.currentTrack?.qualityBadge ?: "24-BIT FLAC",
-                isTravelMode = playerState.isTravelModeEnabled,
-                onTravelModeToggle = { viewModel.toggleTravelMode() }
-            )
-
-            // 2. Pixel Styled Search Bar with "+ Create" Quick Action
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(horizontal = 20.dp, vertical = 6.dp)
-            ) {
-                Box(
+            // Google Pixel At-a-Glance Widget Header (visible on Home)
+            if (currentTab == PixelNavTab.HOME) {
+                PixelAtAGlanceHeader(
+                    isPlaying = playerState.isPlaying,
+                    activeTrackTitle = playerState.currentTrack?.title,
+                    networkStatusText = playerState.networkStatusText,
+                    qualityBadge = playerState.currentTrack?.qualityBadge ?: "24-BIT FLAC",
+                    isTravelMode = playerState.isTravelModeEnabled,
+                    onTravelModeToggle = { viewModel.toggleTravelMode() }
+                )
+            } else {
+                // Secondary Tab Header
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween,
                     modifier = Modifier
-                        .weight(1f)
-                        .clip(RoundedCornerShape(26.dp))
-                        .background(MonochromeSurfaceContainer)
-                        .border(1.dp, MonochromeOutlineVariant, RoundedCornerShape(26.dp))
-                        .padding(horizontal = 16.dp, vertical = 12.dp)
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 12.dp)
                 ) {
-                    Row(
-                        verticalAlignment = Alignment.CenterVertically,
-                        modifier = Modifier.fillMaxWidth()
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Search,
-                            contentDescription = "Search",
-                            tint = MonochromeSilver,
-                            modifier = Modifier.size(18.dp)
+                    Column {
+                        Text(
+                            text = when (currentTab) {
+                                PixelNavTab.FOR_YOU -> "Recommendations"
+                                PixelNavTab.SEARCH -> "Explore & Search"
+                                PixelNavTab.LIBRARY -> "Your Library"
+                                else -> "Aura Music"
+                            },
+                            fontSize = 22.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MonochromeWhite
                         )
-                        Spacer(modifier = Modifier.width(10.dp))
-                        Box(modifier = Modifier.weight(1f)) {
-                            if (searchQuery.isEmpty()) {
+                        Text(
+                            text = when (currentTab) {
+                                PixelNavTab.FOR_YOU -> "Curated Spotify, YouTube Music & Lossless streams"
+                                PixelNavTab.SEARCH -> "Find songs, albums, and artists"
+                                PixelNavTab.LIBRARY -> "Playlists, custom albums & cached music"
+                                else -> "Monochrome Audio"
+                            },
+                            fontSize = 12.sp,
+                            color = MonochromeSilver
+                        )
+                    }
+
+                    if (currentTab == PixelNavTab.LIBRARY) {
+                        Box(
+                            contentAlignment = Alignment.Center,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(16.dp))
+                                .background(MonochromeSurfaceContainer)
+                                .border(1.dp, MonochromeOutlineVariant, RoundedCornerShape(16.dp))
+                                .clickable { viewModel.openCreatePlaylistDialog() }
+                                .padding(horizontal = 12.dp, vertical = 8.dp)
+                        ) {
+                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                Icon(
+                                    imageVector = Icons.Default.Add,
+                                    contentDescription = "New",
+                                    tint = MonochromeWhite,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(4.dp))
                                 Text(
-                                    text = "Search Spotify & YT Music albums, songs...",
-                                    color = MonochromeMuted,
-                                    fontSize = 13.sp,
-                                    maxLines = 1,
-                                    overflow = TextOverflow.Ellipsis
+                                    text = "New",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.Bold,
+                                    color = MonochromeWhite
                                 )
                             }
-                            BasicTextField(
-                                value = searchQuery,
-                                onValueChange = { viewModel.setSearchQuery(it) },
-                                textStyle = TextStyle(
-                                    color = MonochromeWhite,
-                                    fontSize = 13.sp,
-                                    fontWeight = FontWeight.Normal
-                                ),
-                                cursorBrush = SolidColor(MonochromeWhite),
-                                modifier = Modifier.fillMaxWidth(),
-                                singleLine = true
-                            )
-                        }
-                        if (searchQuery.isNotEmpty()) {
-                            Icon(
-                                imageVector = Icons.Default.Close,
-                                contentDescription = "Clear",
-                                tint = MonochromeSilver,
-                                modifier = Modifier
-                                    .size(18.dp)
-                                    .clickable { viewModel.setSearchQuery("") }
-                            )
                         }
                     }
                 }
+            }
 
-                Spacer(modifier = Modifier.width(8.dp))
-
-                // "+ Create Album / Playlist" Quick Button
-                Box(
-                    contentAlignment = Alignment.Center,
+            // Search Bar (shown on SEARCH tab or when search is active)
+            if (currentTab == PixelNavTab.SEARCH || currentTab == PixelNavTab.HOME) {
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
-                        .size(46.dp)
-                        .clip(RoundedCornerShape(20.dp))
-                        .background(MonochromeSurfaceContainer)
-                        .border(1.dp, MonochromeOutlineVariant, RoundedCornerShape(20.dp))
-                        .clickable { viewModel.openCreatePlaylistDialog() }
+                        .fillMaxWidth()
+                        .padding(horizontal = 20.dp, vertical = 4.dp)
                 ) {
-                    Icon(
-                        imageVector = Icons.Default.Add,
-                        contentDescription = "Create Album or Playlist",
-                        tint = MonochromeWhite,
-                        modifier = Modifier.size(20.dp)
-                    )
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(26.dp))
+                            .background(MonochromeSurfaceContainer)
+                            .border(1.dp, MonochromeOutlineVariant, RoundedCornerShape(26.dp))
+                            .padding(horizontal = 16.dp, vertical = 12.dp)
+                    ) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            modifier = Modifier.fillMaxWidth()
+                        ) {
+                            Icon(
+                                imageVector = Icons.Default.Search,
+                                contentDescription = "Search",
+                                tint = MonochromeSilver,
+                                modifier = Modifier.size(18.dp)
+                            )
+                            Spacer(modifier = Modifier.width(10.dp))
+                            Box(modifier = Modifier.weight(1f)) {
+                                if (searchQuery.isEmpty()) {
+                                    Text(
+                                        text = "Search Spotify & YT Music albums, songs...",
+                                        color = MonochromeMuted,
+                                        fontSize = 13.sp,
+                                        maxLines = 1,
+                                        overflow = TextOverflow.Ellipsis
+                                    )
+                                }
+                                BasicTextField(
+                                    value = searchQuery,
+                                    onValueChange = { viewModel.setSearchQuery(it) },
+                                    textStyle = TextStyle(
+                                        color = MonochromeWhite,
+                                        fontSize = 13.sp,
+                                        fontWeight = FontWeight.Normal
+                                    ),
+                                    cursorBrush = SolidColor(MonochromeWhite),
+                                    modifier = Modifier.fillMaxWidth(),
+                                    singleLine = true
+                                )
+                            }
+                            if (searchQuery.isNotEmpty()) {
+                                Icon(
+                                    imageVector = Icons.Default.Close,
+                                    contentDescription = "Clear",
+                                    tint = MonochromeSilver,
+                                    modifier = Modifier
+                                        .size(18.dp)
+                                        .clickable { viewModel.setSearchQuery("") }
+                                )
+                            }
+                        }
+                    }
+
+                    Spacer(modifier = Modifier.width(8.dp))
+
+                    // "+ Create Album / Playlist" Quick Button
+                    Box(
+                        contentAlignment = Alignment.Center,
+                        modifier = Modifier
+                            .size(46.dp)
+                            .clip(RoundedCornerShape(20.dp))
+                            .background(MonochromeSurfaceContainer)
+                            .border(1.dp, MonochromeOutlineVariant, RoundedCornerShape(20.dp))
+                            .clickable { viewModel.openCreatePlaylistDialog() }
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Add,
+                            contentDescription = "Create Album or Playlist",
+                            tint = MonochromeWhite,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
                 }
             }
 
             Spacer(modifier = Modifier.height(6.dp))
 
-            // 3. Category Filter Chips (All Tracks, Recommendations, Albums, My Playlists, etc.)
-            PixelFilterChips(
-                categories = viewModel.categories,
-                selectedCategory = selectedCategory,
-                onCategorySelected = { viewModel.setCategory(it) }
-            )
-
-            Spacer(modifier = Modifier.height(10.dp))
+            // Category Filter Chips on HOME or SEARCH
+            if (currentTab == PixelNavTab.HOME || currentTab == PixelNavTab.SEARCH) {
+                PixelFilterChips(
+                    categories = listOf("All Tracks", "Lossless FLAC", "Spotify", "YouTube Music", "Device Library"),
+                    selectedCategory = selectedCategory,
+                    onCategorySelected = { viewModel.setCategory(it) }
+                )
+                Spacer(modifier = Modifier.height(10.dp))
+            }
 
             // Scrollable Content
             LazyColumn(
@@ -217,14 +288,15 @@ fun MainScreen(
                     .fillMaxWidth()
                     .weight(1f)
                     .padding(horizontal = 20.dp),
+                contentPadding = PaddingValues(bottom = 150.dp),
                 verticalArrangement = Arrangement.spacedBy(14.dp)
             ) {
-                // SECTION A: SEARCH ACTIVE (Show matching Albums & matching Songs)
-                if (searchQuery.isNotBlank()) {
+                // 1. SEARCH ACTIVE OR SEARCH TAB
+                if (searchQuery.isNotBlank() || currentTab == PixelNavTab.SEARCH) {
                     if (filteredAlbums.isNotEmpty()) {
                         item {
                             Text(
-                                text = "MATCHING ALBUMS FROM ONLINE (${filteredAlbums.size})",
+                                text = "MATCHING ONLINE ALBUMS (${filteredAlbums.size})",
                                 fontSize = 10.sp,
                                 fontWeight = FontWeight.Bold,
                                 letterSpacing = 1.1.sp,
@@ -267,8 +339,8 @@ fun MainScreen(
                         )
                     }
                 }
-                // SECTION B: RECOMMENDATIONS VIEW
-                else if (selectedCategory == "Recommendations") {
+                // 2. FOR YOU / RECOMMENDATIONS TAB
+                else if (currentTab == PixelNavTab.FOR_YOU) {
                     items(recommendations) { section ->
                         Column(modifier = Modifier.fillMaxWidth()) {
                             Row(
@@ -307,7 +379,7 @@ fun MainScreen(
 
                             Spacer(modifier = Modifier.height(10.dp))
 
-                            // Recommended Albums Carousel
+                            // Recommended Albums
                             if (section.albums.isNotEmpty()) {
                                 LazyRow(
                                     horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -324,7 +396,7 @@ fun MainScreen(
                                 Spacer(modifier = Modifier.height(12.dp))
                             }
 
-                            // Recommended Songs in this section
+                            // Recommended Songs
                             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                                 section.tracks.forEach { track ->
                                     val isSelected = playerState.currentTrack?.id == track.id
@@ -340,81 +412,16 @@ fun MainScreen(
                         }
                     }
                 }
-                // SECTION C: ALBUMS VIEW
-                else if (selectedCategory == "Albums") {
+                // 3. LIBRARY TAB
+                else if (currentTab == PixelNavTab.LIBRARY) {
                     item {
                         Text(
-                            text = "ONLINE & LOSSLESS ALBUMS",
+                            text = "CUSTOM ALBUMS & PLAYLISTS (${playlists.size})",
                             fontSize = 10.sp,
                             fontWeight = FontWeight.Bold,
                             letterSpacing = 1.1.sp,
                             color = MonochromeSilver
                         )
-                        Spacer(modifier = Modifier.height(10.dp))
-                        LazyRow(
-                            horizontalArrangement = Arrangement.spacedBy(12.dp),
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            items(filteredAlbums) { album ->
-                                PixelAlbumCard(
-                                    album = album,
-                                    onClick = { viewModel.openAlbum(album) },
-                                    onPlayClick = { viewModel.playAlbum(album) }
-                                )
-                            }
-                        }
-                    }
-
-                    item {
-                        Spacer(modifier = Modifier.height(8.dp))
-                        Text(
-                            text = "ALL ALBUM TRACKS (${tracks.size})",
-                            fontSize = 10.sp,
-                            fontWeight = FontWeight.Bold,
-                            letterSpacing = 1.1.sp,
-                            color = MonochromeSilver
-                        )
-                    }
-
-                    items(tracks) { track ->
-                        val isSelected = playerState.currentTrack?.id == track.id
-                        PixelTrackTile(
-                            track = track,
-                            isSelected = isSelected,
-                            isPlaying = playerState.isPlaying,
-                            onClick = { viewModel.playTrack(track) },
-                            onMoreClick = { viewModel.openAddToPlaylist(track) }
-                        )
-                    }
-                }
-                // SECTION D: MY PLAYLISTS & CUSTOM ALBUMS
-                else if (selectedCategory == "My Playlists") {
-                    item {
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.SpaceBetween,
-                            modifier = Modifier.fillMaxWidth()
-                        ) {
-                            Text(
-                                text = "CUSTOM ALBUMS & PLAYLISTS",
-                                fontSize = 10.sp,
-                                fontWeight = FontWeight.Bold,
-                                letterSpacing = 1.1.sp,
-                                color = MonochromeSilver
-                            )
-
-                            Text(
-                                text = "+ New Album / Playlist",
-                                fontSize = 11.sp,
-                                fontWeight = FontWeight.Bold,
-                                color = MonochromeWhite,
-                                modifier = Modifier
-                                    .clip(RoundedCornerShape(8.dp))
-                                    .background(MonochromeSurfaceContainer)
-                                    .clickable { viewModel.openCreatePlaylistDialog() }
-                                    .padding(horizontal = 8.dp, vertical = 4.dp)
-                            )
-                        }
                     }
 
                     items(playlists) { pl ->
@@ -464,7 +471,7 @@ fun MainScreen(
                                             .padding(horizontal = 4.dp, vertical = 1.dp)
                                     ) {
                                         Text(
-                                            text = if (pl.isCustomAlbum) "ALBUM" else "PLAYLIST",
+                                            text = if (pl.isCustomAlbum) "CUSTOM ALBUM" else "PLAYLIST",
                                             fontSize = 7.sp,
                                             fontWeight = FontWeight.Bold,
                                             color = MonochromeWhite
@@ -506,7 +513,7 @@ fun MainScreen(
                         }
                     }
                 }
-                // SECTION E: DEFAULT (ALL TRACKS / SPOTIFY / YOUTUBE MUSIC / LOSSLESS)
+                // 4. HOME TAB
                 else {
                     // Featured Now Playing Hero Card
                     val currentTrack = playerState.currentTrack
@@ -645,19 +652,18 @@ fun MainScreen(
                         )
                     }
                 }
-
-                item {
-                    Spacer(modifier = Modifier.height(90.dp))
-                }
             }
         }
 
-        // Floating Pixel Mini Player Bar
+        // Floating Pixel Mini Player Bar (Sits right above Bottom Navigation Bar)
         AnimatedVisibility(
             visible = playerState.currentTrack != null,
             enter = slideInVertically(initialOffsetY = { it }) + fadeIn(),
             exit = slideOutVertically(targetOffsetY = { it }) + fadeOut(),
-            modifier = Modifier.align(Alignment.BottomCenter)
+            modifier = Modifier
+                .align(Alignment.BottomCenter)
+                .navigationBarsPadding()
+                .padding(bottom = 68.dp)
         ) {
             val track = playerState.currentTrack
             if (track != null) {
@@ -671,6 +677,13 @@ fun MainScreen(
                 )
             }
         }
+
+        // Google Pixel Navigation Tabs Down (Bottom Navigation Bar)
+        PixelBottomNavBar(
+            selectedTab = currentTab,
+            onTabSelected = { viewModel.setNavTab(it) },
+            modifier = Modifier.align(Alignment.BottomCenter)
+        )
 
         // Fullscreen Google Pixel Expanded Player Screen
         AnimatedVisibility(
