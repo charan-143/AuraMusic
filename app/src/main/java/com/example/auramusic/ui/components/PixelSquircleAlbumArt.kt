@@ -76,17 +76,6 @@ fun PixelSquircleAlbumArt(
     val context = LocalContext.current
     val fallbackGradient = rememberColorfulGradient(coverArtUrl ?: titleFallback)
 
-    // Optional rotation transition for spinning vinyl effect on large views
-    val infiniteTransition = rememberInfiniteTransition(label = "vinylSpin")
-    val spinningRotation by infiniteTransition.animateFloat(
-        initialValue = 0f,
-        targetValue = 360f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(durationMillis = 9000, easing = LinearEasing)
-        ),
-        label = "rotation"
-    )
-
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
@@ -130,42 +119,7 @@ fun PixelSquircleAlbumArt(
 
         // Concentric Vinyl Disc Sheen (ONLY rendered when showVinylGrooves is explicitly true)
         if (showVinylGrooves) {
-            Canvas(
-                modifier = Modifier
-                    .fillMaxSize()
-                    .rotate(if (isPlaying) spinningRotation else 0f)
-            ) {
-                val center = Offset(size.width / 2f, size.height / 2f)
-                val maxRadius = size.minDimension / 2f
-
-                // Subtle transparent outer vinyl grooves
-                val grooveSteps = 4
-                for (i in 1..grooveSteps) {
-                    val r = maxRadius * (0.45f + (i * 0.12f))
-                    drawCircle(
-                        color = Color.White.copy(alpha = 0.04f),
-                        radius = r,
-                        center = center,
-                        style = Stroke(width = 1.dp.toPx())
-                    )
-                }
-
-                // Vinyl sheen sweep gradient reflection
-                drawCircle(
-                    brush = Brush.sweepGradient(
-                        colors = listOf(
-                            Color.Transparent,
-                            Color.White.copy(alpha = 0.06f),
-                            Color.Transparent,
-                            Color.White.copy(alpha = 0.06f),
-                            Color.Transparent
-                        ),
-                        center = center
-                    ),
-                    radius = maxRadius,
-                    center = center
-                )
-            }
+            SpinningVinylSheen(isPlaying = isPlaying)
 
             // Minimalist discrete spindle center dot (only in vinyl mode)
             Box(
@@ -184,5 +138,55 @@ fun PixelSquircleAlbumArt(
                 )
             }
         }
+    }
+}
+
+@Composable
+private fun SpinningVinylSheen(isPlaying: Boolean) {
+    val infiniteTransition = rememberInfiniteTransition(label = "vinylSpin")
+    val spinningRotation by infiniteTransition.animateFloat(
+        initialValue = 0f,
+        targetValue = 360f,
+        animationSpec = infiniteRepeatable(
+            animation = tween(durationMillis = 9000, easing = LinearEasing)
+        ),
+        label = "rotation"
+    )
+
+    Canvas(
+        modifier = Modifier
+            .fillMaxSize()
+            .rotate(if (isPlaying) spinningRotation else 0f)
+    ) {
+        val center = Offset(size.width / 2f, size.height / 2f)
+        val maxRadius = size.minDimension / 2f
+
+        // Subtle transparent outer vinyl grooves
+        val grooveSteps = 4
+        for (i in 1..grooveSteps) {
+            val r = maxRadius * (0.45f + (i * 0.12f))
+            drawCircle(
+                color = Color.White.copy(alpha = 0.04f),
+                radius = r,
+                center = center,
+                style = Stroke(width = 1.dp.toPx())
+            )
+        }
+
+        // Vinyl sheen sweep gradient reflection
+        drawCircle(
+            brush = Brush.sweepGradient(
+                colors = listOf(
+                    Color.Transparent,
+                    Color.White.copy(alpha = 0.06f),
+                    Color.Transparent,
+                    Color.White.copy(alpha = 0.06f),
+                    Color.Transparent
+                ),
+                center = center
+            ),
+            radius = maxRadius,
+            center = center
+        )
     }
 }

@@ -324,7 +324,10 @@ fun MainScreen(
                                     color = colors.textSecondary
                                 )
                             }
-                            items(filteredTracks) { track ->
+                            items(
+                                items = filteredTracks,
+                                key = { it.id }
+                            ) { track ->
                                 val isSelected = playerState.currentTrack?.id == track.id
                                 PixelTrackTile(
                                     track = track,
@@ -467,7 +470,10 @@ fun MainScreen(
                                     horizontalArrangement = Arrangement.spacedBy(12.dp),
                                     modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    items(filteredAlbums) { album ->
+                                    items(
+                                        items = filteredAlbums,
+                                        key = { it.id }
+                                    ) { album ->
                                         PixelAlbumCard(
                                             album = album,
                                             onClick = { viewModel.openAlbum(album) },
@@ -489,7 +495,10 @@ fun MainScreen(
                                     color = colors.textSecondary
                                 )
                             }
-                            items(filteredTracks) { track ->
+                            items(
+                                items = filteredTracks,
+                                key = { it.id }
+                            ) { track ->
                                 val isSelected = playerState.currentTrack?.id == track.id
                                 PixelTrackTile(
                                     track = track,
@@ -502,7 +511,10 @@ fun MainScreen(
                         }
 
                         // Algorithmic Recommendations ("For You" Carousels)
-                        items(recommendations) { section ->
+                        items(
+                            items = recommendations,
+                            key = { it.id }
+                        ) { section ->
                             if (section.albums.isNotEmpty() || section.tracks.isNotEmpty()) {
                                 Column(modifier = Modifier.fillMaxWidth()) {
                                     Row(
@@ -542,7 +554,10 @@ fun MainScreen(
                                     if (section.albums.isNotEmpty()) {
                                         Spacer(modifier = Modifier.height(10.dp))
                                         LazyRow(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                                            items(section.albums) { album ->
+                                            items(
+                                                items = section.albums,
+                                                key = { it.id }
+                                            ) { album ->
                                                 PixelAlbumCard(
                                                     album = album,
                                                     onClick = { viewModel.openAlbum(album) },
@@ -651,7 +666,10 @@ fun MainScreen(
                                 }
                             }
                         } else {
-                            items(playlists) { pl ->
+                            items(
+                                items = playlists,
+                                key = { it.id }
+                            ) { pl ->
                                 Box(
                                     modifier = Modifier
                                         .fillMaxWidth()

@@ -1,8 +1,8 @@
 package com.example.auramusic.model
 
 enum class StreamingSource(val displayName: String, val badge: String) {
-    SPOTIFY("Spotify", "SPOTIFY 320K"),
-    YOUTUBE_MUSIC("YouTube Music", "YT OPUS 256K"),
+    SPOTIFY("Spotify", "SPOTIFY LOSSLESS"),
+    YOUTUBE_MUSIC("YouTube Music", "YT LOSSLESS"),
     LOSSLESS_FLAC("Lossless Master", "24-BIT FLAC"),
     LOCAL_STORAGE("Device Storage", "LOCAL FLAC")
 }

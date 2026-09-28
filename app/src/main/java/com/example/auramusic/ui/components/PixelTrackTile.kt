@@ -13,6 +13,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
@@ -50,26 +51,6 @@ fun PixelTrackTile(
     val haptic = LocalHapticFeedback.current
     val colors = PixelTheme.colors
 
-    val infiniteTransition = rememberInfiniteTransition(label = "eqAnimation")
-    val bar1 by infiniteTransition.animateFloat(
-        initialValue = 0.3f,
-        targetValue = 1.0f,
-        animationSpec = infiniteRepeatable(tween(450), RepeatMode.Reverse),
-        label = "bar1"
-    )
-    val bar2 by infiniteTransition.animateFloat(
-        initialValue = 0.8f,
-        targetValue = 0.2f,
-        animationSpec = infiniteRepeatable(tween(600), RepeatMode.Reverse),
-        label = "bar2"
-    )
-    val bar3 by infiniteTransition.animateFloat(
-        initialValue = 0.4f,
-        targetValue = 0.9f,
-        animationSpec = infiniteRepeatable(tween(350), RepeatMode.Reverse),
-        label = "bar3"
-    )
-
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -105,42 +86,7 @@ fun PixelTrackTile(
             )
 
             if (isSelected && isPlaying) {
-                // Discrete live equalizer mini indicator in bottom corner
-                Box(
-                    modifier = Modifier
-                        .matchParentSize()
-                        .background(Color.Black.copy(alpha = 0.35f))
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    contentAlignment = Alignment.BottomCenter
-                ) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.SpaceEvenly,
-                        verticalAlignment = Alignment.Bottom
-                    ) {
-                        Box(
-                            modifier = Modifier
-                                .width(3.dp)
-                                .height((18 * bar1).dp.coerceAtLeast(4.dp))
-                                .clip(RoundedCornerShape(2.dp))
-                                .background(Color.White)
-                        )
-                        Box(
-                            modifier = Modifier
-                                .width(3.dp)
-                                .height((18 * bar2).dp.coerceAtLeast(4.dp))
-                                .clip(RoundedCornerShape(2.dp))
-                                .background(Color.White)
-                        )
-                        Box(
-                            modifier = Modifier
-                                .width(3.dp)
-                                .height((18 * bar3).dp.coerceAtLeast(4.dp))
-                                .clip(RoundedCornerShape(2.dp))
-                                .background(Color.White)
-                        )
-                    }
-                }
+                ActiveEqualizerOverlay()
             }
         }
 
@@ -210,3 +156,63 @@ fun PixelTrackTile(
         }
     }
 }
+
+@Composable
+private fun ActiveEqualizerOverlay() {
+    val infiniteTransition = rememberInfiniteTransition(label = "eqAnimation")
+    val bar1 by infiniteTransition.animateFloat(
+        initialValue = 0.3f,
+        targetValue = 1.0f,
+        animationSpec = infiniteRepeatable(tween(450), RepeatMode.Reverse),
+        label = "bar1"
+    )
+    val bar2 by infiniteTransition.animateFloat(
+        initialValue = 0.8f,
+        targetValue = 0.2f,
+        animationSpec = infiniteRepeatable(tween(600), RepeatMode.Reverse),
+        label = "bar2"
+    )
+    val bar3 by infiniteTransition.animateFloat(
+        initialValue = 0.4f,
+        targetValue = 0.9f,
+        animationSpec = infiniteRepeatable(tween(350), RepeatMode.Reverse),
+        label = "bar3"
+    )
+
+    Box(
+        modifier = Modifier
+            .fillMaxSize()
+            .background(Color.Black.copy(alpha = 0.35f))
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        contentAlignment = Alignment.BottomCenter
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.Bottom
+        ) {
+            Box(
+                modifier = Modifier
+                    .width(3.dp)
+                    .height((18 * bar1).dp.coerceAtLeast(4.dp))
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(Color.White)
+            )
+            Box(
+                modifier = Modifier
+                    .width(3.dp)
+                    .height((18 * bar2).dp.coerceAtLeast(4.dp))
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(Color.White)
+            )
+            Box(
+                modifier = Modifier
+                    .width(3.dp)
+                    .height((18 * bar3).dp.coerceAtLeast(4.dp))
+                    .clip(RoundedCornerShape(2.dp))
+                    .background(Color.White)
+            )
+        }
+    }
+}
+

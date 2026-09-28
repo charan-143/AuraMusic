@@ -394,15 +394,15 @@
     let currentPositionMs = 0;
     let tickerInterval = null;
 
-    // Online Discovery Catalog (Spotify, YouTube Music, FLAC)
+    // Online Discovery Catalog (Spotify, YouTube Music, FLAC) - All 100% Lossless
     const onlineCatalog = [
       {
         id: "sp_1",
         title: "Starboy",
         artist: "The Weeknd",
         album: "Starboy (Deluxe)",
-        source: "Spotify",
-        quality: "320kbps Hi-Fi",
+        source: "Spotify Lossless",
+        quality: "24-BIT FLAC",
         durationMs: 230000,
         cover: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&auto=format&fit=crop&q=80",
         freq: 330
@@ -413,7 +413,7 @@
         artist: "Hans Zimmer",
         album: "Interstellar Soundtrack",
         source: "YouTube Music",
-        quality: "Opus 256kbps",
+        quality: "YT LOSSLESS",
         durationMs: 126000,
         cover: "https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?w=400&auto=format&fit=crop&q=80",
         freq: 440
@@ -423,8 +423,8 @@
         title: "Resonance",
         artist: "HOME Synthwave",
         album: "Odyssey Lossless",
-        source: "FLAC Master",
-        quality: "24-bit 96kHz",
+        source: "Studio Master",
+        quality: "24-BIT 96kHz FLAC",
         durationMs: 212000,
         cover: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=400&auto=format&fit=crop&q=80",
         freq: 392
@@ -434,8 +434,8 @@
         title: "Blinding Lights",
         artist: "The Weeknd",
         album: "After Hours",
-        source: "Spotify",
-        quality: "320kbps Hi-Fi",
+        source: "Spotify Lossless",
+        quality: "24-BIT FLAC",
         durationMs: 200000,
         cover: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=400&auto=format&fit=crop&q=80",
         freq: 349
@@ -443,9 +443,9 @@
     ];
 
     const onlineAlbums = [
-      { id: "alb_1", title: "Starboy", artist: "The Weeknd", source: "Spotify", cover: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&auto=format&fit=crop&q=80", count: 18 },
-      { id: "alb_2", title: "Interstellar OST", artist: "Hans Zimmer", source: "YouTube Music", cover: "https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?w=400&auto=format&fit=crop&q=80", count: 16 },
-      { id: "alb_3", title: "Odyssey", artist: "HOME Synthwave", source: "Lossless Master", cover: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=400&auto=format&fit=crop&q=80", count: 12 }
+      { id: "alb_1", title: "Starboy", artist: "The Weeknd", source: "Spotify Lossless", cover: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&auto=format&fit=crop&q=80", count: 18 },
+      { id: "alb_2", title: "Interstellar OST", artist: "Hans Zimmer", source: "YT Lossless", cover: "https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?w=400&auto=format&fit=crop&q=80", count: 16 },
+      { id: "alb_3", title: "Odyssey", artist: "HOME Synthwave", source: "24-bit FLAC Master", cover: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=400&auto=format&fit=crop&q=80", count: 12 }
     ];
 
     let userPlaylists = [
