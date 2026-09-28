@@ -53,6 +53,9 @@ class MusicPlayerManager(private val context: Context) {
     private val _playerState = MutableStateFlow(PlayerState())
     val playerState: StateFlow<PlayerState> = _playerState.asStateFlow()
 
+    private val _playbackProgress = MutableStateFlow(PlaybackProgress())
+    val playbackProgress: StateFlow<PlaybackProgress> = _playbackProgress.asStateFlow()
+
     val cacheManager by lazy { AdaptiveAudioCacheManager(context) }
     val equalizerManager by lazy { EqualizerManager(context) }
 
@@ -84,9 +87,16 @@ class MusicPlayerManager(private val context: Context) {
                     override fun onPlaybackStateChanged(playbackState: Int) {
                         if (playbackState == Player.STATE_READY) {
                             val duration = exoPlayer.duration.coerceAtLeast(0L)
+                            val effectiveDuration = if (duration > 0) duration else (_playerState.value.currentTrack?.durationMs ?: 180000L)
                             _playerState.update {
                                 it.copy(
-                                    durationMs = if (duration > 0) duration else (it.currentTrack?.durationMs ?: 180000L),
+                                    durationMs = effectiveDuration,
+                                    bufferedPositionMs = exoPlayer.bufferedPosition
+                                )
+                            }
+                            _playbackProgress.update {
+                                it.copy(
+                                    durationMs = effectiveDuration,
                                     bufferedPositionMs = exoPlayer.bufferedPosition
                                 )
                             }
@@ -100,7 +110,7 @@ class MusicPlayerManager(private val context: Context) {
                         newPosition: Player.PositionInfo,
                         reason: Int
                     ) {
-                        _playerState.update {
+                        _playbackProgress.update {
                             it.copy(
                                 currentPositionMs = newPosition.positionMs,
                                 bufferedPositionMs = exoPlayer.bufferedPosition
@@ -209,16 +219,22 @@ class MusicPlayerManager(private val context: Context) {
     fun setQueue(tracks: List<Track>, initialIndex: Int = 0) {
         if (tracks.isEmpty()) return
         val clampedIndex = initialIndex.coerceIn(0, tracks.lastIndex)
+        val selected = tracks[clampedIndex]
         _playerState.update {
             it.copy(
                 queue = tracks,
                 currentIndex = clampedIndex,
-                currentTrack = tracks[clampedIndex],
-                durationMs = tracks[clampedIndex].durationMs,
+                currentTrack = selected,
+                durationMs = selected.durationMs,
                 currentPositionMs = 0L,
                 bufferedPositionMs = 0L
             )
         }
+        _playbackProgress.value = PlaybackProgress(
+            currentPositionMs = 0L,
+            bufferedPositionMs = 0L,
+            durationMs = selected.durationMs
+        )
         // Predictive prefetch of next tracks
         cacheManager.prefetchUpcomingTracks(tracks, clampedIndex)
     }
@@ -238,6 +254,11 @@ class MusicPlayerManager(private val context: Context) {
                 isPlaying = true
             )
         }
+        _playbackProgress.value = PlaybackProgress(
+            currentPositionMs = 0L,
+            bufferedPositionMs = 0L,
+            durationMs = track.durationMs
+        )
 
         // Trigger background preloading of upcoming tracks for seamless traveling
         cacheManager.prefetchUpcomingTracks(queue, index)
@@ -314,7 +335,7 @@ class MusicPlayerManager(private val context: Context) {
     }
 
     fun seekToRatio(ratio: Float) {
-        val currentDuration = _playerState.value.durationMs.coerceAtLeast(1000L)
+        val currentDuration = _playbackProgress.value.durationMs.coerceAtLeast(_playerState.value.durationMs).coerceAtLeast(1000L)
         val targetMs = (ratio * currentDuration).toLong().coerceIn(0L, currentDuration)
         seekTo(targetMs)
     }
@@ -323,6 +344,7 @@ class MusicPlayerManager(private val context: Context) {
         if (exoPlayer.playbackState != Player.STATE_IDLE && _playerState.value.currentTrack?.audioUrl?.isNotBlank() == true) {
             exoPlayer.seekTo(positionMs)
         }
+        _playbackProgress.update { it.copy(currentPositionMs = positionMs) }
         _playerState.update { it.copy(currentPositionMs = positionMs) }
     }
 
@@ -343,7 +365,8 @@ class MusicPlayerManager(private val context: Context) {
         if (state.queue.isEmpty()) return
 
         // If played more than 3 seconds, restart current track
-        if (state.currentPositionMs > 3000L) {
+        val currentMs = _playbackProgress.value.currentPositionMs
+        if (currentMs > 3000L || state.currentPositionMs > 3000L) {
             seekTo(0L)
             return
         }
@@ -641,35 +664,36 @@ class MusicPlayerManager(private val context: Context) {
         positionTickerJob = scope.launch {
             while (isActive) {
                 delay(250)
-                if (_playerState.value.isPlaying) {
+                val state = _playerState.value
+                if (state.isPlaying) {
                     if (exoPlayer.isPlaying) {
                         val current = exoPlayer.currentPosition
-                        val duration = exoPlayer.duration.coerceAtLeast(_playerState.value.durationMs)
+                        val duration = exoPlayer.duration.coerceAtLeast(state.durationMs)
                         val buffered = exoPlayer.bufferedPosition
-                        _playerState.update {
-                            it.copy(
-                                currentPositionMs = current,
-                                durationMs = duration,
-                                bufferedPositionMs = buffered
-                            )
-                        }
+                        _playbackProgress.value = PlaybackProgress(
+                            currentPositionMs = current,
+                            durationMs = duration,
+                            bufferedPositionMs = buffered
+                        )
                     } else {
                         // Simulated progression
-                        _playerState.update { state ->
-                            val speedFactor = state.playbackSpeed
-                            val newPos = (state.currentPositionMs + (250 * speedFactor).toLong())
-                            // Simulated buffer advances fast ahead of playback (e.g. +60 seconds ahead)
-                            val simulatedBuffer = (newPos + 60000L).coerceAtMost(state.durationMs)
-                            if (newPos >= state.durationMs && state.durationMs > 0) {
-                                if (state.isRepeatOne) {
-                                    state.copy(currentPositionMs = 0L)
-                                } else {
-                                    skipNext()
-                                    state
-                                }
+                        val currentProg = _playbackProgress.value
+                        val speedFactor = state.playbackSpeed
+                        val newPos = (currentProg.currentPositionMs + (250 * speedFactor).toLong())
+                        val simDuration = state.durationMs.coerceAtLeast(currentProg.durationMs)
+                        val simulatedBuffer = (newPos + 60000L).coerceAtMost(simDuration)
+                        if (newPos >= simDuration && simDuration > 0) {
+                            if (state.isRepeatOne) {
+                                _playbackProgress.value = PlaybackProgress(currentPositionMs = 0L, durationMs = simDuration)
                             } else {
-                                state.copy(currentPositionMs = newPos, bufferedPositionMs = simulatedBuffer)
+                                skipNext()
                             }
+                        } else {
+                            _playbackProgress.value = PlaybackProgress(
+                                currentPositionMs = newPos,
+                                bufferedPositionMs = simulatedBuffer,
+                                durationMs = simDuration
+                            )
                         }
                     }
                 }

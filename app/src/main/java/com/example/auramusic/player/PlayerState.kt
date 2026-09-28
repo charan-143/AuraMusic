@@ -3,6 +3,39 @@ package com.example.auramusic.player
 import com.example.auramusic.model.AudioBitrateMode
 import com.example.auramusic.model.Track
 
+/**
+ * Lightweight, high-frequency playback progress model.
+ * Emitted by the player ticker (every 250ms) to update seekbars and synced lyrics
+ * without triggering recompositions of the wider UI hierarchy.
+ */
+data class PlaybackProgress(
+    val currentPositionMs: Long = 0L,
+    val bufferedPositionMs: Long = 0L,
+    val durationMs: Long = 0L
+) {
+    val progress: Float
+        get() = if (durationMs > 0) (currentPositionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) else 0f
+
+    val bufferedProgress: Float
+        get() = if (durationMs > 0) (bufferedPositionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) else 0f
+
+    val formattedCurrentPosition: String
+        get() {
+            val totalSeconds = (currentPositionMs / 1000).coerceAtLeast(0)
+            val minutes = totalSeconds / 60
+            val seconds = totalSeconds % 60
+            return "%d:%02d".format(minutes, seconds)
+        }
+
+    val formattedDuration: String
+        get() {
+            val totalSeconds = (durationMs / 1000).coerceAtLeast(0)
+            val minutes = totalSeconds / 60
+            val seconds = totalSeconds % 60
+            return "%d:%02d".format(minutes, seconds)
+        }
+}
+
 data class PlayerState(
     val currentTrack: Track? = null,
     val isPlaying: Boolean = false,
