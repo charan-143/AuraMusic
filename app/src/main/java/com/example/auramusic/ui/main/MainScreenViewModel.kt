@@ -201,6 +201,42 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
+    private val lyricsService = com.example.auramusic.network.LyricsService()
+
+    private val _currentTrackLyrics = MutableStateFlow<com.example.auramusic.model.TrackLyrics?>(null)
+    val currentTrackLyrics: StateFlow<com.example.auramusic.model.TrackLyrics?> = _currentTrackLyrics.asStateFlow()
+
+    private val _isLyricsViewActive = MutableStateFlow(false)
+    val isLyricsViewActive: StateFlow<Boolean> = _isLyricsViewActive.asStateFlow()
+
+    fun toggleLyricsView() {
+        _isLyricsViewActive.value = !_isLyricsViewActive.value
+    }
+
+    fun setLyricsView(active: Boolean) {
+        _isLyricsViewActive.value = active
+    }
+
+    fun seekToPosition(positionMs: Long) {
+        playerManager.seekTo(positionMs)
+    }
+
+    private var lyricsJob: Job? = null
+
+    private fun loadLyricsForTrack(track: Track) {
+        lyricsJob?.cancel()
+        _currentTrackLyrics.value = com.example.auramusic.model.TrackLyrics(
+            trackId = track.id,
+            title = track.title,
+            artist = track.artist,
+            isLoading = true
+        )
+        lyricsJob = viewModelScope.launch {
+            val lyrics = lyricsService.getLyrics(track)
+            _currentTrackLyrics.value = lyrics
+        }
+    }
+
     init {
         // Build initial discovery recommendations
         refreshRecommendations(null)
@@ -241,7 +277,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
             }
         }
 
-        // When current track ID actually changes, refresh recommendations
+        // When current track ID actually changes, refresh recommendations & fetch live synced lyrics
         viewModelScope.launch {
             var lastTrackId: String? = null
             playerState.collect { state ->
@@ -250,6 +286,9 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                     lastTrackId = track?.id
                     if (track != null) {
                         refreshRecommendations(track)
+                        loadLyricsForTrack(track)
+                    } else {
+                        _currentTrackLyrics.value = null
                     }
                 }
             }

@@ -136,6 +136,8 @@ fun MainScreen(
         val equalizerState by viewModel.equalizerState.collectAsState()
         val isEqualizerSheetVisible by viewModel.isEqualizerSheetVisible.collectAsState()
         val selectedCategory by viewModel.selectedCategory.collectAsState()
+        val currentTrackLyrics by viewModel.currentTrackLyrics.collectAsState()
+        val isLyricsViewActive by viewModel.isLyricsViewActive.collectAsState()
 
         // System Back Navigation Handling across all sheets, dialogs, player, and tabs
         BackHandler(enabled = isCreatePlaylistDialogVisible) {
@@ -159,7 +161,10 @@ fun MainScreen(
         BackHandler(enabled = !isCreatePlaylistDialogVisible && !isAddToPlaylistSheetVisible && !isSleepTimerDialogVisible && !isAlbumSheetVisible && !isEqualizerSheetVisible && !isAudioRouteSheetVisible && isQueueVisible) {
             viewModel.setQueueVisible(false)
         }
-        BackHandler(enabled = !isCreatePlaylistDialogVisible && !isAddToPlaylistSheetVisible && !isSleepTimerDialogVisible && !isAlbumSheetVisible && !isEqualizerSheetVisible && !isAudioRouteSheetVisible && !isQueueVisible && isExpandedPlayer) {
+        BackHandler(enabled = !isCreatePlaylistDialogVisible && !isAddToPlaylistSheetVisible && !isSleepTimerDialogVisible && !isAlbumSheetVisible && !isEqualizerSheetVisible && !isAudioRouteSheetVisible && !isQueueVisible && isExpandedPlayer && isLyricsViewActive) {
+            viewModel.setLyricsView(false)
+        }
+        BackHandler(enabled = !isCreatePlaylistDialogVisible && !isAddToPlaylistSheetVisible && !isSleepTimerDialogVisible && !isAlbumSheetVisible && !isEqualizerSheetVisible && !isAudioRouteSheetVisible && !isQueueVisible && isExpandedPlayer && !isLyricsViewActive) {
             viewModel.setExpandedPlayer(false)
         }
         BackHandler(enabled = !isCreatePlaylistDialogVisible && !isAddToPlaylistSheetVisible && !isSleepTimerDialogVisible && !isAlbumSheetVisible && !isEqualizerSheetVisible && !isAudioRouteSheetVisible && !isQueueVisible && !isExpandedPlayer && currentTab != PixelNavTab.HOME) {
@@ -1652,7 +1657,11 @@ fun MainScreen(
                     onAudioRouteClick = { viewModel.openAudioRouteSheet() },
                     onMoreOptionsClick = { viewModel.openSleepTimerDialog() },
                     onEqualizerClick = { viewModel.openEqualizerSheet() },
-                    activeAudioDevice = playerState.activeAudioOutputDevice
+                    activeAudioDevice = playerState.activeAudioOutputDevice,
+                    lyrics = currentTrackLyrics,
+                    isLyricsActive = isLyricsViewActive,
+                    onToggleLyrics = { viewModel.toggleLyricsView() },
+                    onSeekToTimestamp = { viewModel.seekToPosition(it) }
                 )
             }
 

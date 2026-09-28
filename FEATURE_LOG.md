@@ -28,6 +28,7 @@ This document provides a record of all features, architectural milestones, UI/UX
 | **FEAT-031** | Full-Length Online Music Engine, Home Recommendations & Rich Search Discovery | Audio Streaming & UI | `COMPLETE` | Motorola Edge 50 Pro | 2026-09-28 |
 | **FEAT-032** | Bottom-Attached Flush Navigation Bar & Expanded Player Geometry Fix | UI/UX & Layout Architecture | `COMPLETE` | Motorola Edge 50 Pro | 2026-09-28 |
 | **FEAT-033** | Seamless Screen Switching, Tactile Spring Animations, and Bottom-Attached Player & Queue Sheets | UI/UX, Animations & Navigation Architecture | `COMPLETE` | Motorola Edge 50 Pro | 2026-09-28 |
+| **FEAT-034** | Real-Time Synced Karaoke Lyrics Engine & Interactive Lyrics View | Audio Synchronization & UI | `COMPLETE` | Motorola Edge 50 Pro | 2026-09-28 |
 
 ---
 
@@ -797,6 +798,45 @@ This document provides a record of all features, architectural milestones, UI/UX
 - **Verification**:
   - Successfully compiled with zero errors via `./gradlew.bat compileDebugKotlin` and installed on Motorola Edge 50 Pro (`ZD222MKB8C`).
   - Verified live on physical hardware via ADB screencap (`screen_home.png`).
+
+---
+
+### [FEAT-034] Real-Time Synced Karaoke Lyrics Engine & Interactive Lyrics View
+- **Date**: 2026-09-28
+- **Category**: Audio Synchronization & UI
+- **Status**: `COMPLETE`
+- **Files Affected**:
+  - `app/src/main/java/com/example/auramusic/model/Lyrics.kt`
+  - `app/src/main/java/com/example/auramusic/network/LyricsService.kt`
+  - `app/src/main/java/com/example/auramusic/ui/components/PixelSyncedLyricsView.kt`
+  - `app/src/main/java/com/example/auramusic/ui/components/PixelExpandedPlayer.kt`
+  - `app/src/main/java/com/example/auramusic/ui/main/MainScreenViewModel.kt`
+  - `app/src/main/java/com/example/auramusic/ui/main/MainScreen.kt`
+- **Description**:
+  Implemented end-to-end time-synchronized karaoke lyrics across all streaming and catalog music tracks:
+  1. **LRC Parser & Multi-Source Lyrics Service**:
+     - Built `LyricsService` with direct integration to the open LRCLIB database (`/api/get` and `/api/search`).
+     - Supports high-precision millisecond LRC timestamp parsing (`[mm:ss.xx] Lyric line`).
+     - Automatic sanitization of artist and track titles (stripping acoustic, remix, soundtrack metadata) to ensure maximum match rate across Indian, Bollywood, Pop, Rock, and global tracks.
+     - Built-in synchronized bank for core and popular tracks with instant 0ms retrieval via in-memory caching (`ConcurrentHashMap`).
+     - Automatic timestamp distribution fallback for plain lyrics and ambient soundscapes for instrumental compositions.
+  2. **Reactive Lyrics State in ViewModel**:
+     - Automatically fetches and parses synchronized lyrics whenever `playerState.currentTrack` changes.
+     - Exposes `currentTrackLyrics: StateFlow<TrackLyrics?>` and `isLyricsViewActive: StateFlow<Boolean>`.
+  3. **Interactive Pixel Synced Lyrics View (`PixelSyncedLyricsView`)**:
+     - Google Pixel Material 3 Expressive Monochrome aesthetic with pitch-black OLED background.
+     - Pulsing "LIVE SYNCED LYRICS" indicator dot and LRCLIB source pill.
+     - Active line dynamically highlighted: bold 20sp stark white (`#FFFFFF`) with 1.04x bouncy spring scale and left vertical indicator bar.
+     - Past lines styled in soft gray (`#999999`) and upcoming lines in dark muted gray (`#444444`).
+     - Smooth auto-scrolling with `animateScrollToItem` that keeps the active singing line centered in the viewport.
+     - **Interactive Tap-to-Seek**: Tapping any lyric line instantly seeks playback to that exact timestamp with tactile haptic feedback.
+  4. **Seamless Player Integration (`PixelExpandedPlayer`)**:
+     - 3 intuitive entry points: top bar `Mic` button, bottom row `Lyrics` pill button, and direct tap on the album artwork.
+     - Fluid `Crossfade` animation between Album Artwork view and Synced Lyrics view without stopping or interrupting music playback.
+     - Layered `BackHandler` integration so pressing back exits Lyrics mode smoothly before collapsing the player.
+- **Verification**:
+  - Successfully compiled via `./gradlew.bat compileDebugKotlin` and assembled into APK via `./gradlew.bat assembleDebug`.
+  - Verified live API querying with real-time LRC timestamp outputs for English and Hindi tracks (e.g. *Believer*, *Yellow*, *Tum Hi Ho*).
 
 ---
 
