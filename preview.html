@@ -353,7 +353,52 @@
       }
     ];
 
-    const categories = ["All Tracks", "Lossless Master", "Spotify Hi-Fi", "YouTube Music", "Device Library"];
+
+    const albums = [
+      {
+        id: "album_spotify_starboy",
+        title: "Starboy",
+        artist: "The Weeknd",
+        sourceBadge: "Spotify 320k",
+        cover: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&auto=format&fit=crop&q=80",
+        tracksCount: 3,
+        year: "2016"
+      },
+      {
+        id: "album_ytm_interstellar",
+        title: "Interstellar OST",
+        artist: "Hans Zimmer",
+        sourceBadge: "YT Music Opus",
+        cover: "https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?w=400&auto=format&fit=crop&q=80",
+        tracksCount: 3,
+        year: "2014"
+      },
+      {
+        id: "album_lossless_audiophile",
+        title: "Audiophile Sessions",
+        artist: "Aura Sound Lab",
+        sourceBadge: "FLAC 24-bit",
+        cover: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=400&auto=format&fit=crop&q=80",
+        tracksCount: 3,
+        year: "2024"
+      },
+      {
+        id: "album_ytm_odyssey",
+        title: "Odyssey",
+        artist: "HOME Synthwave",
+        sourceBadge: "YT Music Opus",
+        cover: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=400&auto=format&fit=crop&q=80",
+        tracksCount: 2,
+        year: "2018"
+      }
+    ];
+
+    let myPlaylists = [
+      { id: "pl_1", name: "Monochrome Favorites", type: "Playlist", count: 3, cover: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=400&auto=format&fit=crop&q=80" },
+      { id: "pl_2", name: "Midnight Sessions (My Album)", type: "Custom Album", count: 4, cover: "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=400&auto=format&fit=crop&q=80" }
+    ];
+
+    const categories = ["All Tracks", "Recommendations", "Albums", "My Playlists", "Lossless Master", "Spotify Hi-Fi", "YouTube Music"];
     let selectedCategory = "All Tracks";
     let currentTrackIndex = 0;
     let isPlaying = false;
@@ -389,10 +434,53 @@
     function setCategory(cat) {
       selectedCategory = cat;
       renderChips();
-      renderTrackList();
+      renderTrackList(); renderAlbums();
     }
 
-    function renderTrackList() {
+    
+    function renderAlbums() {
+      const container = document.getElementById("albumsContainer");
+      if (!container) return;
+      const query = document.getElementById("searchInput").value.toLowerCase();
+      const filtered = albums.filter(a => !query || a.title.toLowerCase().includes(query) || a.artist.toLowerCase().includes(query));
+      
+      container.innerHTML = filtered.map(a => `
+        <div onclick="selectAlbum('${a.id}')" class="w-36 flex-shrink-0 bg-[#121212] border border-[#262626] rounded-2xl p-2.5 cursor-pointer hover:border-[#444] transition-all">
+          <div class="relative w-full h-28 bg-[#202020] rounded-xl overflow-hidden mb-2">
+            <img src="${a.cover}" class="w-full h-full object-cover filter grayscale">
+            <span class="absolute top-1.5 left-1.5 text-[8px] font-bold px-1.5 py-0.5 rounded bg-black/80 text-white border border-white/20">${a.sourceBadge}</span>
+          </div>
+          <div class="text-xs font-bold text-white truncate">${a.title}</div>
+          <div class="text-[10px] text-[#888] truncate">${a.artist} • ${a.tracksCount} tracks</div>
+        </div>
+      `).join('');
+    }
+
+    function selectAlbum(albumId) {
+      const a = albums.find(x => x.id === albumId);
+      if (a) {
+        alert("Playing Album: " + a.title + " by " + a.artist + " (" + a.sourceBadge + ")");
+        togglePlay();
+      }
+    }
+
+    function promptCreatePlaylist() {
+      const name = prompt("Enter New Playlist or Album Title:", "My Late Night Mix");
+      if (name) {
+        const isAlbum = confirm("Create as Custom Album? (OK for Custom Album, Cancel for Playlist)");
+        myPlaylists.unshift({
+          id: "pl_" + Date.now(),
+          name: name,
+          type: isAlbum ? "Custom Album" : "Playlist",
+          count: 1,
+          cover: tracks[currentTrackIndex].cover
+        });
+        alert("Created " + (isAlbum ? "Custom Album: " : "Playlist: ") + name);
+        renderTrackList(); renderAlbums();
+      }
+    }
+
+function renderTrackList() {
       const list = document.getElementById("trackList");
       const filtered = tracks.filter(t => {
         const matchCat = selectedCategory === "All Tracks" || t.category === selectedCategory;
@@ -477,7 +565,7 @@
         document.getElementById("ambientSubtext").innerText = "Monochrome Soundscape";
       }
 
-      renderTrackList();
+      renderTrackList(); renderAlbums();
       renderQueue();
     }
 
@@ -661,7 +749,7 @@
 
     // Initialize UI
     renderChips();
-    renderTrackList();
+    renderTrackList(); renderAlbums();
     renderQueue();
     updateUI();
     drawWave();
