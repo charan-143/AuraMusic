@@ -53,6 +53,7 @@ import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.LightMode
 import androidx.compose.material.icons.filled.MusicNote
 import androidx.compose.material.icons.filled.PlayArrow
+import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Speaker
@@ -291,20 +292,37 @@ fun MainScreen(
                                                 overflow = TextOverflow.Ellipsis
                                             )
                                         }
-                                        Box(
-                                            contentAlignment = Alignment.Center,
-                                            modifier = Modifier
-                                                .size(42.dp)
-                                                .clip(CircleShape)
-                                                .background(colors.activePillBackground)
-                                                .clickable { viewModel.togglePlayPause() }
-                                        ) {
-                                            Icon(
-                                                imageVector = if (playerState.isPlaying) Icons.Default.GraphicEq else Icons.Default.PlayArrow,
-                                                contentDescription = "Play",
-                                                tint = colors.activePillText,
-                                                modifier = Modifier.size(20.dp)
-                                            )
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            IconButton(
+                                                onClick = {
+                                                    haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                                                    viewModel.startTrackRadio(currentTrack)
+                                                },
+                                                modifier = Modifier.size(38.dp)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Radio,
+                                                    contentDescription = "Start Track Radio",
+                                                    tint = colors.textSecondary,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.width(4.dp))
+                                            Box(
+                                                contentAlignment = Alignment.Center,
+                                                modifier = Modifier
+                                                    .size(42.dp)
+                                                    .clip(CircleShape)
+                                                    .background(colors.activePillBackground)
+                                                    .clickable { viewModel.togglePlayPause() }
+                                            ) {
+                                                Icon(
+                                                    imageVector = if (playerState.isPlaying) Icons.Default.GraphicEq else Icons.Default.PlayArrow,
+                                                    contentDescription = "Play",
+                                                    tint = colors.activePillText,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                            }
                                         }
                                     }
                                 }
@@ -328,7 +346,7 @@ fun MainScreen(
                                             .border(1.dp, if (isSelected) colors.activePillBackground else colors.outlineVariant, RoundedCornerShape(18.dp))
                                             .clickable {
                                                 haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                                                if (mood == "All Recommendations") viewModel.setCategory("All Tracks") else viewModel.searchGenre(mood)
+                                                if (mood == "All Recommendations") viewModel.setCategory("All Tracks") else viewModel.setCategory(mood)
                                             }
                                             .padding(horizontal = 14.dp, vertical = 7.dp)
                                     ) {

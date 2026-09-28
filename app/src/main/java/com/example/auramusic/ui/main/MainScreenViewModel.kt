@@ -35,7 +35,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     private val playerManager = MusicPlayerManager.getInstance(application)
     private val networkObserver = NetworkQualityObserver(application)
     private val playlistRepository = PlaylistRepository(application, audioRepository)
-    private val recommendationEngine = RecommendationEngine(audioRepository)
+    private val recommendationEngine = RecommendationEngine(audioRepository, application)
     private val onlineSearchService = OnlineMusicSearchService()
 
     val playerState: StateFlow<PlayerState> = playerManager.playerState
@@ -279,12 +279,26 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
 
         // When current track ID actually changes, refresh recommendations & fetch live synced lyrics
         viewModelScope.launch {
-            var lastTrackId: String? = null
+            var lastTrack: Track? = null
+            var lastTrackStartTime = 0L
             playerState.collect { state ->
                 val track = state.currentTrack
-                if (track?.id != lastTrackId) {
-                    lastTrackId = track?.id
+                if (track?.id != lastTrack?.id) {
+                    val prev = lastTrack
+                    if (prev != null) {
+                        val playedDuration = System.currentTimeMillis() - lastTrackStartTime
+                        if (playedDuration >= 45000L || state.progress >= 0.70f) {
+                            recommendationEngine.recordPlaybackCompletion(prev)
+                        } else if (playedDuration < 20000L) {
+                            recommendationEngine.recordSkip(prev, playedDuration, prev.durationMs)
+                        }
+                    }
+
+                    lastTrack = track
+                    lastTrackStartTime = System.currentTimeMillis()
+
                     if (track != null) {
+                        recommendationEngine.recordPlaybackStart(track)
                         refreshRecommendations(track)
                         loadLyricsForTrack(track)
                     } else {
@@ -340,11 +354,43 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     private fun refreshRecommendations(track: Track?) {
-        _recommendations.value = recommendationEngine.getOnlineRecommendationSections(
+        val mood = _selectedCategory.value
+        val rawSections = recommendationEngine.getOnlineRecommendationSections(
             activeTrack = track,
             providedTracks = _allTracks.value,
             providedAlbums = _allAlbums.value
         )
+
+        _recommendations.value = if (mood.isNotBlank() && mood != "All Tracks" && mood != "All Recommendations" && mood != "All" && mood != "My Playlists" && mood != "Albums") {
+            val moodTracks = recommendationEngine.getTracksForMoodChip(mood, _allTracks.value)
+            if (moodTracks.isNotEmpty()) {
+                listOf(
+                    RecommendationSection(
+                        id = "rec_mood_${mood.lowercase().replace(" ", "_")}",
+                        title = "$mood Curation",
+                        subtitle = "Harmonically tuned algorithmic flow matching your $mood vibe",
+                        source = track?.source ?: com.example.auramusic.model.StreamingSource.SPOTIFY,
+                        albums = emptyList(),
+                        tracks = moodTracks.take(8)
+                    )
+                ) + rawSections
+            } else {
+                rawSections
+            }
+        } else {
+            rawSections
+        }
+    }
+
+    /**
+     * Generates an intelligent, continuous 15-track smart radio queue matching the seed track
+     * and immediately begins playback.
+     */
+    fun startTrackRadio(seedTrack: Track) {
+        val pool = _allTracks.value.ifEmpty { audioRepository.getMultiSourceTracks() }
+        val radioQueue = recommendationEngine.generateRadioQueue(seedTrack, pool, count = 15)
+        playerManager.setQueue(radioQueue, 0)
+        playerManager.playTrack(seedTrack, radioQueue)
     }
 
     // Playback and Selection
@@ -495,6 +541,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
 
     fun setCategory(category: String) {
         _selectedCategory.value = category
+        refreshRecommendations(playerState.value.currentTrack)
     }
 
     fun setSearchQuery(query: String) {
