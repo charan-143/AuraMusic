@@ -84,6 +84,12 @@ fun PixelQueueSheet(
             .clip(RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp))
             .background(MonochromeSurface)
             .border(1.dp, MonochromeOutline, RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp))
+            .clickable(
+                interactionSource = remember { MutableInteractionSource() },
+                indication = null
+            ) {
+                // Intentionally consume all clicks inside the queue sheet so they do not fall through to the background dismiss scrim
+            }
             .navigationBarsPadding()
             .padding(top = 10.dp, bottom = 24.dp)
     ) {
@@ -95,7 +101,7 @@ fun PixelQueueSheet(
                 .pointerInput(Unit) {
                     detectVerticalDragGestures(
                         onDragEnd = {
-                            if (dragOffsetY > 120f) {
+                            if (dragOffsetY > 250f) {
                                 onCloseClick()
                             }
                             dragOffsetY = 0f
