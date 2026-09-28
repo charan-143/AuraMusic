@@ -443,6 +443,28 @@ This document provides a record of all features, architectural milestones, UI/UX
 
 ---
 
+### [FEAT-025] Full-Color High-Definition Song Thumbnails & Fallbacks
+- **Date**: 2026-09-28
+- **Category**: UI/UX & Artwork Engine
+- **Status**: COMPLETE
+- **Files Affected**:
+  - `app/src/main/java/com/example/auramusic/ui/components/PixelSquircleAlbumArt.kt`
+  - `app/src/main/java/com/example/auramusic/ui/components/PixelTrackTile.kt`
+  - `app/src/main/java/com/example/auramusic/ui/components/PixelMiniPlayer.kt`
+  - `app/src/main/java/com/example/auramusic/ui/components/PixelExpandedPlayer.kt`
+  - `app/src/main/java/com/example/auramusic/ui/main/MainScreen.kt`
+  - `app/src/main/java/com/example/auramusic/data/AudioRepository.kt`
+  - `preview.html`
+- **Description**:
+  Addressed the user's request for vibrant, colorful song thumbnails instead of monochrome/disc icon overlays:
+  - **Eliminated Grayscale Color Filters**: Removed forced desaturation matrix (`ColorFilter.colorMatrix(monochromeColorMatrix)`) from `PixelSquircleAlbumArt.kt` and `filter grayscale` from `preview.html`, allowing the original, full, vivid, rich colors of all album and song covers to display uncompressed.
+  - **Removed Obstructive Center Hole / Disc Badges**: Discontinued rendering the 46dp center spindle hole and vinyl groove overlay on thumbnails (`showVinylGrooves = false`), ensuring song list tiles and the floating mini player display clear, unobstructed artwork.
+  - **Vibrant Fallback Gradient Generator**: Implemented `rememberColorfulGradient(seed)` with 10 rich chromatic gradients (sunset orange, neon magenta, electric ocean blue, cyberpunk pink, emerald green, etc.) to guarantee that tracks without remote images always display a vibrant, colorful cover rather than an empty box or icon.
+  - **Local Device MediaStore Album Art**: Updated `AudioRepository.kt` to extract `MediaStore.Audio.Media.ALBUM_ID` and build real album art URIs (`content://media/external/audio/albumart/<albumId>`) alongside curated colorful fallback artwork.
+- **Verification**: Verified via `./gradlew.bat assembleDebug` (Build Successful in 36s), installed and verified live on Motorola Edge 50 Pro.
+
+---
+
 ## 3. Change Tracking Guidelines for New Features
 
 When adding or modifying features in the future, append an entry following this format:
