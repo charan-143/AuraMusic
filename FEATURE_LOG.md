@@ -394,6 +394,29 @@ This document provides a record of all features, architectural milestones, UI/UX
 
 ---
 
+### [FEAT-023] Live Online Search Service for Spotify & YouTube Music
+- **Date**: 2026-09-28
+- **Category**: Network & Search / Live Streaming
+- **Status**: COMPLETE
+- **Files Affected**:
+  - `app/src/main/java/com/example/auramusic/network/OnlineMusicSearchService.kt`
+  - `app/src/main/java/com/example/auramusic/ui/main/MainScreenViewModel.kt`
+  - `app/src/main/java/com/example/auramusic/ui/main/MainScreen.kt`
+  - `app/src/main/AndroidManifest.xml`
+  - `preview.html`
+- **Description**:
+  Resolved missing search results by integrating real-time online search querying live music endpoints:
+  - `OnlineMusicSearchService`: fetches matching songs and albums from the internet in <500ms on `Dispatchers.IO`.
+  - 350ms debounced search job in `MainScreenViewModel` avoiding redundant network traffic while typing.
+  - Maps live online results to Spotify 320k (`SPOTIFY 320K`) and YouTube Music Opus (`YT OPUS 256K`) streams.
+  - Replaces thumbnail artwork with 600x600 HD album art for OLED screens.
+  - Live audio preview streaming directly playable via ExoPlayer and cached into Media3 `SimpleCache`.
+  - Live visual indicator (`"Searching online Spotify & YouTube Music..."`) and empty-state search suggestions.
+  - Added `android:usesCleartextTraffic="true"` for universal CDN streaming audio compatibility.
+- **Verification**: Verified via testDebugUnitTest, local network queries, and interactive live search in `preview.html`.
+
+---
+
 ## 3. Change Tracking Guidelines for New Features
 
 When adding or modifying features in the future, append an entry following this format:
