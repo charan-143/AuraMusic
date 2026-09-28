@@ -22,15 +22,26 @@ class AdaptiveAudioCacheManager(private val context: Context) {
 
     private val scope = CoroutineScope(Dispatchers.IO + Job())
 
-    // 1 GB LRU Cache for offline traveling & roaming stability
-    private val maxCacheSizeBytes: Long = 1024L * 1024L * 1024L // 1 GB
-    private val cacheDir = File(context.cacheDir, "aura_lossless_audio_cache")
+    companion object {
+        private const val MAX_CACHE_SIZE_BYTES: Long = 1024L * 1024L * 1024L // 1 GB
+        @Volatile
+        private var instance: SimpleCache? = null
 
-    val simpleCache: SimpleCache by lazy {
-        val databaseProvider = StandaloneDatabaseProvider(context)
-        val evictor = LeastRecentlyUsedCacheEvictor(maxCacheSizeBytes)
-        SimpleCache(cacheDir, evictor, databaseProvider)
+        @Synchronized
+        fun getCache(context: Context): SimpleCache {
+            return instance ?: synchronized(this) {
+                instance ?: run {
+                    val cacheDir = File(context.applicationContext.cacheDir, "aura_lossless_audio_cache")
+                    val databaseProvider = StandaloneDatabaseProvider(context.applicationContext)
+                    val evictor = LeastRecentlyUsedCacheEvictor(MAX_CACHE_SIZE_BYTES)
+                    SimpleCache(cacheDir, evictor, databaseProvider).also { instance = it }
+                }
+            }
+        }
     }
+
+    val simpleCache: SimpleCache
+        get() = getCache(context)
 
     private val httpDataSourceFactory: DefaultHttpDataSource.Factory =
         DefaultHttpDataSource.Factory()

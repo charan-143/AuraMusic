@@ -1,6 +1,7 @@
 package com.example.auramusic.ui.main
 
 import android.app.Application
+import android.content.Context
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.auramusic.data.AudioRepository
@@ -15,6 +16,7 @@ import com.example.auramusic.network.OnlineMusicSearchService
 import com.example.auramusic.player.MusicPlayerManager
 import com.example.auramusic.player.PlayerState
 import com.example.auramusic.recommendation.RecommendationEngine
+import com.example.auramusic.ui.components.PixelNavTab
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -27,6 +29,8 @@ import kotlinx.coroutines.launch
 
 class MainScreenViewModel(application: Application) : AndroidViewModel(application) {
 
+    private val prefs = application.getSharedPreferences("aura_music_settings", Context.MODE_PRIVATE)
+
     private val audioRepository = AudioRepository(application)
     private val playerManager = MusicPlayerManager(application)
     private val networkObserver = NetworkQualityObserver(application)
@@ -38,8 +42,30 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     val networkStatus = networkObserver.networkStatus
     val playlists: StateFlow<List<Playlist>> = playlistRepository.playlists
 
-    private val _currentTab = MutableStateFlow(com.example.auramusic.ui.components.PixelNavTab.HOME)
-    val currentTab: StateFlow<com.example.auramusic.ui.components.PixelNavTab> = _currentTab.asStateFlow()
+    // Theme Mode: Light Mode vs Dark Mode (Defaults to OLED Dark)
+    private val _isDarkMode = MutableStateFlow(prefs.getBoolean("pref_is_dark_mode", true))
+    val isDarkMode: StateFlow<Boolean> = _isDarkMode.asStateFlow()
+
+    fun toggleThemeMode() {
+        val next = !_isDarkMode.value
+        _isDarkMode.value = next
+        prefs.edit().putBoolean("pref_is_dark_mode", next).apply()
+    }
+
+    // Audio Streaming Quality Preference
+    private val _streamingQuality = MutableStateFlow(
+        prefs.getString("pref_streaming_quality", "Lossless Master (24-bit FLAC)") ?: "Lossless Master (24-bit FLAC)"
+    )
+    val streamingQuality: StateFlow<String> = _streamingQuality.asStateFlow()
+
+    fun setStreamingQuality(quality: String) {
+        _streamingQuality.value = quality
+        prefs.edit().putString("pref_streaming_quality", quality).apply()
+    }
+
+    // 4 Bottom Navigation Tabs: Home, Search (Combined Search + For You), Library, Settings
+    private val _currentTab = MutableStateFlow(PixelNavTab.HOME)
+    val currentTab: StateFlow<PixelNavTab> = _currentTab.asStateFlow()
 
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery.asStateFlow()
@@ -55,6 +81,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     private val _selectedCategory = MutableStateFlow("All Tracks")
     val selectedCategory: StateFlow<String> = _selectedCategory.asStateFlow()
 
+    // Clean dynamic tracks & albums (no hardcoded presets)
     private val _allTracks = MutableStateFlow<List<Track>>(emptyList())
     private val _allAlbums = MutableStateFlow<List<Album>>(emptyList())
     val allAlbums: StateFlow<List<Album>> = _allAlbums.asStateFlow()
@@ -85,16 +112,15 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
 
     val categories = listOf(
         "All Tracks",
-        "Recommendations",
         "Albums",
         "My Playlists",
-        "Lossless FLAC",
         "Spotify",
         "YouTube Music",
+        "Lossless FLAC",
         "Device Library"
     )
 
-    // Filtered Tracks: combines local catalog + live online search results from Spotify & YouTube Music
+    // Filtered Tracks: combines local catalog + live online search results
     val filteredTracks: StateFlow<List<Track>> = combine(
         _allTracks,
         _onlineSearchTracks,
@@ -112,7 +138,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         } else {
             localTracks.filter { track ->
                 when (category) {
-                    "All Tracks", "Recommendations", "Albums", "My Playlists" -> true
+                    "All Tracks", "Albums", "My Playlists" -> true
                     else -> track.category.equals(category, ignoreCase = true) ||
                             track.source.displayName.equals(category, ignoreCase = true)
                 }
@@ -120,7 +146,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         }
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
-    // Filtered Albums: combines local albums + live online search results from Spotify & YouTube Music
+    // Filtered Albums: combines local albums + live online search results
     val filteredAlbums: StateFlow<List<Album>> = combine(
         _allAlbums,
         _onlineSearchAlbums,
@@ -138,7 +164,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         } else {
             localAlbums.filter { album ->
                 when (category) {
-                    "All Tracks", "Recommendations", "Albums" -> true
+                    "All Tracks", "Albums" -> true
                     "Spotify" -> album.source.displayName.contains("Spotify", ignoreCase = true)
                     "YouTube Music" -> album.source.displayName.contains("YouTube", ignoreCase = true)
                     "Lossless FLAC" -> album.isLossless
@@ -149,53 +175,63 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
 
     init {
-        // Initialize multi-source tracks and albums
-        val initialTracks = audioRepository.getMultiSourceTracks()
-        val initialAlbums = audioRepository.getAllAlbums()
-        _allTracks.value = initialTracks
-        _allAlbums.value = initialAlbums
-
-        // Build recommendations
+        // Build initial discovery recommendations
         refreshRecommendations(null)
 
-        playerManager.setQueue(initialTracks, 0)
-
-        // Observe network changes
+        // Observe network changes for dynamic bitrate adaption
         viewModelScope.launch {
             networkObserver.networkStatus.collect { netStatus ->
                 playerManager.updateNetworkStatus(netStatus.statusText)
             }
         }
 
-        // When current track changes, refresh recommendations based on it
+        // When current track changes, refresh recommendations
         viewModelScope.launch {
             playerState.collect { state ->
                 state.currentTrack?.let { refreshRecommendations(it) }
             }
         }
 
-        // Try scanning device storage
+        // Scan device storage for any local audio files
         loadDeviceTracks()
     }
 
-    fun refreshRecommendations(activeTrack: Track?) {
-        _recommendations.value = recommendationEngine.getOnlineRecommendationSections(activeTrack)
-    }
-
-    fun loadDeviceTracks() {
+    private fun loadDeviceTracks() {
         viewModelScope.launch {
-            val deviceTracks = audioRepository.loadDeviceAudio()
-            if (deviceTracks.isNotEmpty()) {
-                val combined = audioRepository.getMultiSourceTracks() + deviceTracks
-                _allTracks.value = combined
-                playerManager.setQueue(combined, playerState.value.currentIndex)
+            val deviceAudio = audioRepository.loadDeviceAudio()
+            if (deviceAudio.isNotEmpty()) {
+                val updated = (audioRepository.getMultiSourceTracks() + deviceAudio).distinctBy { it.id }
+                _allTracks.value = updated
+                playerManager.setQueue(updated, 0)
+                refreshRecommendations(playerState.value.currentTrack)
             }
         }
     }
 
+    fun rescanDeviceAudio() {
+        loadDeviceTracks()
+    }
+
+    fun clearStreamCache() {
+        viewModelScope.launch {
+            try {
+                getApplication<Application>().cacheDir.deleteRecursively()
+            } catch (e: Exception) {
+                // ignore
+            }
+        }
+    }
+
+    private fun refreshRecommendations(track: Track?) {
+        _recommendations.value = recommendationEngine.getOnlineRecommendationSections(track)
+    }
+
+    // Playback and Selection
     fun playTrack(track: Track) {
-        val currentFiltered = filteredTracks.value.ifEmpty { _allTracks.value }
-        playerManager.playTrack(track, currentFiltered)
+        val currentQueue = filteredTracks.value.ifEmpty { listOf(track) }
+        val index = currentQueue.indexOfFirst { it.id == track.id }.coerceAtLeast(0)
+        playerManager.setQueue(currentQueue, index)
+        playerManager.playTrack(track, currentQueue)
     }
 
     // Album Actions
@@ -278,20 +314,20 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     // Navigation and Search
-    fun setNavTab(tab: com.example.auramusic.ui.components.PixelNavTab) {
+    fun setNavTab(tab: PixelNavTab) {
         _currentTab.value = tab
         when (tab) {
-            com.example.auramusic.ui.components.PixelNavTab.HOME -> {
+            PixelNavTab.HOME -> {
                 _selectedCategory.value = "All Tracks"
             }
-            com.example.auramusic.ui.components.PixelNavTab.FOR_YOU -> {
-                _selectedCategory.value = "Recommendations"
+            PixelNavTab.SEARCH -> {
+                // Focus search / discovery mode
             }
-            com.example.auramusic.ui.components.PixelNavTab.SEARCH -> {
-                // Keep search active
-            }
-            com.example.auramusic.ui.components.PixelNavTab.LIBRARY -> {
+            PixelNavTab.LIBRARY -> {
                 _selectedCategory.value = "My Playlists"
+            }
+            PixelNavTab.SETTINGS -> {
+                // Settings tab
             }
         }
     }
@@ -305,8 +341,8 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         searchJob?.cancel()
 
         if (query.isNotBlank()) {
-            if (_currentTab.value != com.example.auramusic.ui.components.PixelNavTab.SEARCH) {
-                _currentTab.value = com.example.auramusic.ui.components.PixelNavTab.SEARCH
+            if (_currentTab.value != PixelNavTab.SEARCH) {
+                _currentTab.value = PixelNavTab.SEARCH
             }
 
             if (query.trim().length >= 2) {

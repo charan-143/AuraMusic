@@ -465,6 +465,49 @@ This document provides a record of all features, architectural milestones, UI/UX
 
 ---
 
+### [FEAT-026] Clean UI, Settings Tab, Combined Search & For You, Light/Dark Mode Switch
+- **Date**: 2026-09-28
+- **Category**: UI/UX & System Architecture
+- **Status**: COMPLETE
+- **Files Affected**:
+  - `app/src/main/java/com/example/auramusic/data/AudioRepository.kt`
+  - `app/src/main/java/com/example/auramusic/theme/Theme.kt`
+  - `app/src/main/java/com/example/auramusic/cache/AdaptiveAudioCacheManager.kt`
+  - `app/src/main/java/com/example/auramusic/recommendation/RecommendationEngine.kt`
+  - `app/src/main/java/com/example/auramusic/ui/components/PixelBottomNavBar.kt`
+  - `app/src/main/java/com/example/auramusic/ui/components/PixelAtAGlanceHeader.kt`
+  - `app/src/main/java/com/example/auramusic/ui/components/PixelMiniPlayer.kt`
+  - `app/src/main/java/com/example/auramusic/ui/components/PixelTrackTile.kt`
+  - `app/src/main/java/com/example/auramusic/ui/components/PixelAlbumCard.kt`
+  - `app/src/main/java/com/example/auramusic/ui/main/MainScreen.kt`
+  - `app/src/main/java/com/example/auramusic/ui/main/MainScreenViewModel.kt`
+  - `preview.html`
+- **Description**:
+  Addressed the user's request: *"remove all preset songs i want a clean ui. add settings tab, combine for you and search. add switch button to switch between light and dark mode."*
+  1. **Clean UI & Purged Preset Songs**:
+     - Purged all hardcoded preset demo tracks from `AudioRepository.kt`.
+     - The repository initializes empty, populating only from live online Spotify & YouTube Music searches or local device scans.
+     - Added clean state cards with discovery action buttons ("Search Online", "View Library", "Rescan Audio").
+  2. **Combined Search & "For You" Tab**:
+     - Consolidated Search and Algorithmic "For You" Recommendations into a unified Discovery tab (`PixelNavTab.SEARCH`).
+     - Features live search query input, source filter chips (All, Spotify, YouTube Music, Albums), and horizontal carousel of recommended albums.
+  3. **4-Tab Bottom Navigation**:
+     - Streamlined bottom navigation bar to 4 tabs: **Home**, **Search**, **Library**, and **Settings**.
+  4. **Settings Tab**:
+     - Dedicated settings screen with dynamic Theme Mode Switch (Dark / Light), Streaming Quality Selector (24-bit Lossless FLAC, Spotify 320k, YTM Opus 256k, Roaming Data Saver), and Library/Cache Storage Management (Rescan Audio, Clear 1GB Adaptive Cache).
+  5. **Dynamic Light & Dark Mode System**:
+     - Extended Material 3 Expressive Monochrome with `DarkPixelTheme` (True OLED Pitch Black `#000000`) and `LightPixelTheme` (Porcelain Light `#F7F7F7`, stark `#111111` typography).
+     - Switch button added both in the At-a-Glance top header and in the Settings tab.
+     - User theme preference persisted via SharedPreferences (`aura_music_settings`).
+  6. **SimpleCache Singleton Thread Safety**:
+     - Migrated Media3 ExoPlayer `SimpleCache` instance in `AdaptiveAudioCacheManager.kt` to a thread-safe synchronized companion singleton to prevent duplicate folder instance collisions across activity lifecycles.
+- **Verification**:
+  - Gradle `assembleDebug` passed cleanly in 57s.
+  - Successfully streamed and installed APK on Motorola Edge 50 Pro (`ZD222MKB8C`).
+  - Process PID 16109 verified running smoothly on device.
+
+---
+
 ## 3. Change Tracking Guidelines for New Features
 
 When adding or modifying features in the future, append an entry following this format:

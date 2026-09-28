@@ -20,7 +20,6 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -37,14 +36,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.auramusic.model.Track
-import com.example.auramusic.theme.MonochromeLightGrey
-import com.example.auramusic.theme.MonochromeMuted
-import com.example.auramusic.theme.MonochromeOutlineVariant
-import com.example.auramusic.theme.MonochromeSilver
-import com.example.auramusic.theme.MonochromeSurface
-import com.example.auramusic.theme.MonochromeSurfaceContainer
-import com.example.auramusic.theme.MonochromeSurfaceHigh
-import com.example.auramusic.theme.MonochromeWhite
+import com.example.auramusic.theme.PixelTheme
 
 @Composable
 fun PixelTrackTile(
@@ -56,8 +48,8 @@ fun PixelTrackTile(
     modifier: Modifier = Modifier
 ) {
     val haptic = LocalHapticFeedback.current
+    val colors = PixelTheme.colors
 
-    // Animated equalizing bars for currently active playing track
     val infiniteTransition = rememberInfiniteTransition(label = "eqAnimation")
     val bar1 by infiniteTransition.animateFloat(
         initialValue = 0.3f,
@@ -82,10 +74,10 @@ fun PixelTrackTile(
         modifier = modifier
             .fillMaxWidth()
             .clip(RoundedCornerShape(16.dp))
-            .background(if (isSelected) MonochromeSurfaceHigh else Color.Transparent)
+            .background(if (isSelected) colors.surfaceContainer else Color.Transparent)
             .border(
                 width = if (isSelected) 1.dp else 0.dp,
-                color = if (isSelected) MonochromeOutlineVariant else Color.Transparent,
+                color = if (isSelected) colors.outlineVariant else Color.Transparent,
                 shape = RoundedCornerShape(16.dp)
             )
             .clickable {
@@ -101,7 +93,7 @@ fun PixelTrackTile(
             modifier = Modifier
                 .size(48.dp)
                 .clip(RoundedCornerShape(14.dp))
-                .background(MonochromeSurfaceContainer)
+                .background(colors.surfaceContainer)
         ) {
             PixelSquircleAlbumArt(
                 coverArtUrl = track.coverArtUrl,
@@ -131,21 +123,21 @@ fun PixelTrackTile(
                                 .width(3.dp)
                                 .height((18 * bar1).dp.coerceAtLeast(4.dp))
                                 .clip(RoundedCornerShape(2.dp))
-                                .background(MonochromeWhite)
+                                .background(Color.White)
                         )
                         Box(
                             modifier = Modifier
                                 .width(3.dp)
                                 .height((18 * bar2).dp.coerceAtLeast(4.dp))
                                 .clip(RoundedCornerShape(2.dp))
-                                .background(MonochromeWhite)
+                                .background(Color.White)
                         )
                         Box(
                             modifier = Modifier
                                 .width(3.dp)
                                 .height((18 * bar3).dp.coerceAtLeast(4.dp))
                                 .clip(RoundedCornerShape(2.dp))
-                                .background(MonochromeWhite)
+                                .background(Color.White)
                         )
                     }
                 }
@@ -160,7 +152,7 @@ fun PixelTrackTile(
                 text = track.title,
                 fontSize = 15.sp,
                 fontWeight = if (isSelected) FontWeight.Bold else FontWeight.SemiBold,
-                color = if (isSelected) MonochromeWhite else MonochromeLightGrey,
+                color = colors.textPrimary,
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis
             )
@@ -170,7 +162,7 @@ fun PixelTrackTile(
                     text = track.artist,
                     fontSize = 12.sp,
                     fontWeight = FontWeight.Normal,
-                    color = MonochromeSilver,
+                    color = colors.textSecondary,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
                 )
@@ -178,28 +170,28 @@ fun PixelTrackTile(
                 Box(
                     modifier = Modifier
                         .clip(RoundedCornerShape(4.dp))
-                        .background(MonochromeSurfaceContainer)
-                        .border(0.5.dp, MonochromeOutlineVariant, RoundedCornerShape(4.dp))
+                        .background(colors.surfaceHigh)
+                        .border(0.5.dp, colors.outlineVariant, RoundedCornerShape(4.dp))
                         .padding(horizontal = 4.dp, vertical = 1.dp)
                 ) {
                     Text(
                         text = track.qualityBadge,
                         fontSize = 8.sp,
                         fontWeight = FontWeight.Bold,
-                        color = MonochromeWhite
+                        color = colors.textPrimary
                     )
                 }
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
                     text = "•",
                     fontSize = 10.sp,
-                    color = MonochromeMuted
+                    color = colors.textTertiary
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
                     text = track.formattedDuration,
                     fontSize = 11.sp,
-                    color = MonochromeMuted
+                    color = colors.textTertiary
                 )
             }
         }
@@ -212,7 +204,7 @@ fun PixelTrackTile(
             Icon(
                 imageVector = Icons.Default.MoreVert,
                 contentDescription = "Track options",
-                tint = MonochromeSilver,
+                tint = colors.textSecondary,
                 modifier = Modifier.size(18.dp)
             )
         }

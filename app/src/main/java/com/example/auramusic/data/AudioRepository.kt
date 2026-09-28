@@ -12,317 +12,60 @@ import com.example.auramusic.model.StreamingSource
 import com.example.auramusic.model.Track
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import kotlin.math.absoluteValue
 
 class AudioRepository(private val context: Context) {
 
-    // Curated online albums with multiple tracks each
-    private val spotifyAlbum1Tracks = listOf(
-        Track(
-            id = "spotify_sb_1",
-            title = "Starboy Echoes",
-            artist = "The Weeknd & Daft Punk",
-            album = "Starboy [Spotify Premium 320k]",
-            durationMs = 230000L,
-            audioUrl = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-2.mp3",
-            coverArtUrl = "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80",
-            source = StreamingSource.SPOTIFY,
-            qualityBadge = "SPOTIFY 320K",
-            isLossless = false,
-            category = "Spotify"
-        ),
-        Track(
-            id = "spotify_sb_2",
-            title = "I Feel It Coming",
-            artist = "The Weeknd & Daft Punk",
-            album = "Starboy [Spotify Premium 320k]",
-            durationMs = 269000L,
-            audioUrl = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-5.mp3",
-            coverArtUrl = "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80",
-            source = StreamingSource.SPOTIFY,
-            qualityBadge = "SPOTIFY 320K",
-            isLossless = false,
-            category = "Spotify"
-        ),
-        Track(
-            id = "spotify_sb_3",
-            title = "Secrets of Night",
-            artist = "The Weeknd",
-            album = "Starboy [Spotify Premium 320k]",
-            durationMs = 224000L,
-            audioUrl = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-6.mp3",
-            coverArtUrl = "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80",
-            source = StreamingSource.SPOTIFY,
-            qualityBadge = "SPOTIFY 320K",
-            isLossless = false,
-            category = "Spotify"
-        )
+    // Clean dynamic music repository without hardcoded dummy songs
+    private val dynamicTracks = mutableListOf<Track>()
+    private val dynamicAlbums = mutableListOf<Album>()
+
+    private val colorfulFallbacks = listOf(
+        "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80",
+        "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=600&auto=format&fit=crop&q=80",
+        "https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?w=600&auto=format&fit=crop&q=80",
+        "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=600&auto=format&fit=crop&q=80",
+        "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80",
+        "https://images.unsplash.com/photo-1550684848-fac1c5b4e853?w=600&auto=format&fit=crop&q=80",
+        "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=600&auto=format&fit=crop&q=80",
+        "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80"
     )
 
-    private val spotifyAlbum2Tracks = listOf(
-        Track(
-            id = "spotify_lofi_1",
-            title = "Coffee Cold Breeze",
-            artist = "ChilledCow Lab",
-            album = "Lofi Study Beats [Spotify 320k]",
-            durationMs = 195000L,
-            audioUrl = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-8.mp3",
-            coverArtUrl = "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=600&auto=format&fit=crop&q=80",
-            source = StreamingSource.SPOTIFY,
-            qualityBadge = "SPOTIFY 320K",
-            isLossless = false,
-            category = "Spotify"
-        ),
-        Track(
-            id = "spotify_lofi_2",
-            title = "Rainy Window Glow",
-            artist = "ChilledCow Lab",
-            album = "Lofi Study Beats [Spotify 320k]",
-            durationMs = 184000L,
-            audioUrl = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-7.mp3",
-            coverArtUrl = "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=600&auto=format&fit=crop&q=80",
-            source = StreamingSource.SPOTIFY,
-            qualityBadge = "SPOTIFY 320K",
-            isLossless = false,
-            category = "Spotify"
-        )
-    )
+    fun getMultiSourceTracks(): List<Track> = synchronized(dynamicTracks) {
+        dynamicTracks.toList()
+    }
 
-    private val ytmAlbum1Tracks = listOf(
-        Track(
-            id = "ytm_is_1",
-            title = "Interstellar Main Theme",
-            artist = "Hans Zimmer",
-            album = "Interstellar OST [YT Opus 256k]",
-            durationMs = 246000L,
-            audioUrl = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-3.mp3",
-            coverArtUrl = "https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?w=600&auto=format&fit=crop&q=80",
-            source = StreamingSource.YOUTUBE_MUSIC,
-            qualityBadge = "YT OPUS 256K",
-            isLossless = false,
-            category = "YouTube Music"
-        ),
-        Track(
-            id = "ytm_is_2",
-            title = "Cornfield Chase (YT HD)",
-            artist = "Hans Zimmer",
-            album = "Interstellar OST [YT Opus 256k]",
-            durationMs = 191000L,
-            audioUrl = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-10.mp3",
-            coverArtUrl = "https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?w=600&auto=format&fit=crop&q=80",
-            source = StreamingSource.YOUTUBE_MUSIC,
-            qualityBadge = "YT OPUS 256K",
-            isLossless = false,
-            category = "YouTube Music"
-        ),
-        Track(
-            id = "ytm_is_3",
-            title = "No Time for Caution",
-            artist = "Hans Zimmer",
-            album = "Interstellar OST [YT Opus 256k]",
-            durationMs = 244000L,
-            audioUrl = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-11.mp3",
-            coverArtUrl = "https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?w=600&auto=format&fit=crop&q=80",
-            source = StreamingSource.YOUTUBE_MUSIC,
-            qualityBadge = "YT OPUS 256K",
-            isLossless = false,
-            category = "YouTube Music"
-        )
-    )
+    fun getAllAlbums(): List<Album> = synchronized(dynamicAlbums) {
+        dynamicAlbums.toList()
+    }
 
-    private val ytmAlbum2Tracks = listOf(
-        Track(
-            id = "ytm_ody_1",
-            title = "Resonance Sunset",
-            artist = "HOME Synthwave",
-            album = "Odyssey [YouTube Music HD]",
-            durationMs = 212000L,
-            audioUrl = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-9.mp3",
-            coverArtUrl = "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=600&auto=format&fit=crop&q=80",
-            source = StreamingSource.YOUTUBE_MUSIC,
-            qualityBadge = "YT OPUS 256K",
-            isLossless = false,
-            category = "YouTube Music"
-        ),
-        Track(
-            id = "ytm_ody_2",
-            title = "Decay Horizons",
-            artist = "HOME Synthwave",
-            album = "Odyssey [YouTube Music HD]",
-            durationMs = 198000L,
-            audioUrl = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-12.mp3",
-            coverArtUrl = "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=600&auto=format&fit=crop&q=80",
-            source = StreamingSource.YOUTUBE_MUSIC,
-            qualityBadge = "YT OPUS 256K",
-            isLossless = false,
-            category = "YouTube Music"
-        )
-    )
+    fun addTracks(tracks: List<Track>) = synchronized(dynamicTracks) {
+        for (track in tracks) {
+            if (dynamicTracks.none { it.id == track.id }) {
+                dynamicTracks.add(track)
+            }
+        }
+    }
 
-    private val losslessAlbum1Tracks = listOf(
-        Track(
-            id = "lossless_as_1",
-            title = "Midnight Monochrome (Lossless Master)",
-            artist = "Aura Sound Lab",
-            album = "Audiophile Sessions [24-bit/96kHz]",
-            durationMs = 214000L,
-            audioUrl = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-1.mp3",
-            coverArtUrl = "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80",
-            source = StreamingSource.LOSSLESS_FLAC,
-            qualityBadge = "24-BIT FLAC",
-            isLossless = true,
-            isCachedOffline = true,
-            category = "Lossless FLAC"
-        ),
-        Track(
-            id = "lossless_as_2",
-            title = "OLED Dark Resonance (Master)",
-            artist = "Aura Sound Lab",
-            album = "Audiophile Sessions [24-bit/96kHz]",
-            durationMs = 242000L,
-            audioUrl = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-13.mp3",
-            coverArtUrl = "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80",
-            source = StreamingSource.LOSSLESS_FLAC,
-            qualityBadge = "24-BIT FLAC",
-            isLossless = true,
-            isCachedOffline = true,
-            category = "Lossless FLAC"
-        ),
-        Track(
-            id = "lossless_as_3",
-            title = "Subtle Shadows (Acoustic Master)",
-            artist = "Aura Sound Lab",
-            album = "Audiophile Sessions [24-bit/96kHz]",
-            durationMs = 228000L,
-            audioUrl = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-14.mp3",
-            coverArtUrl = "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80",
-            source = StreamingSource.LOSSLESS_FLAC,
-            qualityBadge = "24-BIT FLAC",
-            isLossless = true,
-            isCachedOffline = true,
-            category = "Lossless FLAC"
-        )
-    )
+    fun addAlbums(albums: List<Album>) = synchronized(dynamicAlbums) {
+        for (album in albums) {
+            if (dynamicAlbums.none { it.id == album.id }) {
+                dynamicAlbums.add(album)
+            }
+        }
+    }
 
-    private val losslessAlbum2Tracks = listOf(
-        Track(
-            id = "lossless_me_1",
-            title = "Silent Pixel Drift (Pure FLAC)",
-            artist = "Tensor Dreams",
-            album = "Material Echoes [Hi-Res FLAC]",
-            durationMs = 186000L,
-            audioUrl = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-4.mp3",
-            coverArtUrl = "https://images.unsplash.com/photo-1550684848-fac1c5b4e853?w=600&auto=format&fit=crop&q=80",
-            source = StreamingSource.LOSSLESS_FLAC,
-            qualityBadge = "24-BIT FLAC",
-            isLossless = true,
-            isCachedOffline = true,
-            category = "Lossless FLAC"
-        ),
-        Track(
-            id = "lossless_me_2",
-            title = "Spring Physics Walk (Lossless)",
-            artist = "Tensor Dreams",
-            album = "Material Echoes [Hi-Res FLAC]",
-            durationMs = 195000L,
-            audioUrl = "https://www.soundhelix.com/examples/mp3/SoundHelix-Song-15.mp3",
-            coverArtUrl = "https://images.unsplash.com/photo-1550684848-fac1c5b4e853?w=600&auto=format&fit=crop&q=80",
-            source = StreamingSource.LOSSLESS_FLAC,
-            qualityBadge = "24-BIT FLAC",
-            isLossless = true,
-            isCachedOffline = true,
-            category = "Lossless FLAC"
-        )
-    )
+    fun clearTracks() = synchronized(dynamicTracks) {
+        dynamicTracks.clear()
+    }
 
-    // Curated online albums
-    private val onlineAlbums = listOf(
-        Album(
-            id = "album_spotify_starboy",
-            title = "Starboy",
-            artist = "The Weeknd",
-            coverArtUrl = "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80",
-            year = "2016",
-            source = StreamingSource.SPOTIFY,
-            qualityBadge = "SPOTIFY 320K",
-            isLossless = false,
-            description = "High-energy synth-pop & R&B streaming in 320kbps Ogg/AAC directly from Spotify Hi-Fi.",
-            tracks = spotifyAlbum1Tracks
-        ),
-        Album(
-            id = "album_spotify_lofi",
-            title = "Lofi Study Beats",
-            artist = "ChilledCow Lab",
-            coverArtUrl = "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=600&auto=format&fit=crop&q=80",
-            year = "2024",
-            source = StreamingSource.SPOTIFY,
-            qualityBadge = "SPOTIFY 320K",
-            isLossless = false,
-            description = "Chill, nostalgic lofi hip hop beats for deep focus, reading, and night relaxation.",
-            tracks = spotifyAlbum2Tracks
-        ),
-        Album(
-            id = "album_ytm_interstellar",
-            title = "Interstellar OST",
-            artist = "Hans Zimmer",
-            coverArtUrl = "https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?w=600&auto=format&fit=crop&q=80",
-            year = "2014",
-            source = StreamingSource.YOUTUBE_MUSIC,
-            qualityBadge = "YT OPUS 256K",
-            isLossless = false,
-            description = "Epic cinematic organ and orchestral compositions streaming in YouTube Music Opus 256kbps HD.",
-            tracks = ytmAlbum1Tracks
-        ),
-        Album(
-            id = "album_ytm_odyssey",
-            title = "Odyssey",
-            artist = "HOME Synthwave",
-            coverArtUrl = "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=600&auto=format&fit=crop&q=80",
-            year = "2018",
-            source = StreamingSource.YOUTUBE_MUSIC,
-            qualityBadge = "YT OPUS 256K",
-            isLossless = false,
-            description = "Warm analog synthesizers, tape drift, and melancholic retrowave melodies on YouTube Music.",
-            tracks = ytmAlbum2Tracks
-        ),
-        Album(
-            id = "album_lossless_audiophile",
-            title = "Audiophile Sessions",
-            artist = "Aura Sound Lab",
-            coverArtUrl = "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80",
-            year = "2024",
-            source = StreamingSource.LOSSLESS_FLAC,
-            qualityBadge = "24-BIT FLAC",
-            isLossless = true,
-            description = "Direct studio master recordings sampled at 24-bit/96kHz for uncompressed acoustic clarity.",
-            tracks = losslessAlbum1Tracks
-        ),
-        Album(
-            id = "album_lossless_echoes",
-            title = "Material Echoes",
-            artist = "Tensor Dreams",
-            coverArtUrl = "https://images.unsplash.com/photo-1550684848-fac1c5b4e853?w=600&auto=format&fit=crop&q=80",
-            year = "2024",
-            source = StreamingSource.LOSSLESS_FLAC,
-            qualityBadge = "24-BIT FLAC",
-            isLossless = true,
-            description = "Subtle monochrome textures, modular synthesizers, and ambient acoustic field recordings in FLAC.",
-            tracks = losslessAlbum2Tracks
-        )
-    )
+    fun getAlbumsBySource(source: StreamingSource): List<Album> = synchronized(dynamicAlbums) {
+        dynamicAlbums.filter { it.source == source }
+    }
 
-    // Flat list of all multi-source streaming tracks
-    private val allMultiSourceTracks: List<Track> = onlineAlbums.flatMap { it.tracks }
-
-    fun getMultiSourceTracks(): List<Track> = allMultiSourceTracks
-
-    fun getAllAlbums(): List<Album> = onlineAlbums
-
-    fun getAlbumsBySource(source: StreamingSource): List<Album> =
-        onlineAlbums.filter { it.source == source }
-
-    fun searchAlbums(query: String): List<Album> {
+    fun searchAlbums(query: String): List<Album> = synchronized(dynamicAlbums) {
         if (query.isBlank()) return emptyList()
-        return onlineAlbums.filter { album ->
+        dynamicAlbums.filter { album ->
             album.title.contains(query, ignoreCase = true) ||
             album.artist.contains(query, ignoreCase = true) ||
             album.source.displayName.contains(query, ignoreCase = true) ||
@@ -330,6 +73,9 @@ class AudioRepository(private val context: Context) {
         }
     }
 
+    /**
+     * Scans and loads audio files physically stored on the device via Android MediaStore.
+     */
     suspend fun loadDeviceAudio(): List<Track> = withContext(Dispatchers.IO) {
         val deviceTracks = mutableListOf<Track>()
         val resolver: ContentResolver = context.contentResolver
@@ -347,17 +93,6 @@ class AudioRepository(private val context: Context) {
             MediaStore.Audio.Media.ALBUM,
             MediaStore.Audio.Media.DURATION,
             MediaStore.Audio.Media.ALBUM_ID
-        )
-
-        val colorfulFallbacks = listOf(
-            "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80",
-            "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=600&auto=format&fit=crop&q=80",
-            "https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?w=600&auto=format&fit=crop&q=80",
-            "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=600&auto=format&fit=crop&q=80",
-            "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80",
-            "https://images.unsplash.com/photo-1550684848-fac1c5b4e853?w=600&auto=format&fit=crop&q=80",
-            "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=600&auto=format&fit=crop&q=80",
-            "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80"
         )
 
         val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
@@ -381,34 +116,37 @@ class AudioRepository(private val context: Context) {
                     val duration = it.getLong(durationColumn)
                     val albumId = if (albumIdColumn >= 0) it.getLong(albumIdColumn) else -1L
 
-                    val fallbackArt = colorfulFallbacks[(id.toInt().let { h -> if (h < 0) -h else h }) % colorfulFallbacks.size]
+                    val fallbackArt = colorfulFallbacks[(id.hashCode().absoluteValue) % colorfulFallbacks.size]
                     val artUri = if (albumId >= 0) {
                         ContentUris.withAppendedId(Uri.parse("content://media/external/audio/albumart"), albumId).toString()
                     } else fallbackArt
 
                     if (duration > 10000) {
                         val contentUri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id)
-                        deviceTracks.add(
-                            Track(
-                                id = "device_$id",
-                                title = title,
-                                artist = artist,
-                                album = album,
-                                durationMs = duration,
-                                audioUrl = contentUri.toString(),
-                                coverArtUrl = artUri,
-                                isLocal = true,
-                                isLossless = true,
-                                source = StreamingSource.LOCAL_STORAGE,
-                                qualityBadge = "LOCAL FLAC",
-                                category = "Device Library"
-                            )
+                        val track = Track(
+                            id = "device_$id",
+                            title = title,
+                            artist = artist,
+                            album = album,
+                            durationMs = duration,
+                            audioUrl = contentUri.toString(),
+                            coverArtUrl = artUri,
+                            isLocal = true,
+                            isLossless = true,
+                            source = StreamingSource.LOCAL_STORAGE,
+                            qualityBadge = "LOCAL FLAC",
+                            category = "Device Library"
                         )
+                        deviceTracks.add(track)
                     }
                 }
             }
         } catch (e: Exception) {
-            // Permission or querying exception
+            // Permission or querying exception handled safely
+        }
+
+        if (deviceTracks.isNotEmpty()) {
+            addTracks(deviceTracks)
         }
 
         deviceTracks
