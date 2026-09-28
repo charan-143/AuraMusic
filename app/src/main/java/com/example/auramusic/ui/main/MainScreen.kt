@@ -31,10 +31,12 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Bedtime
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.ClearAll
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.DarkMode
+import androidx.compose.material.icons.filled.Delete
 import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.LightMode
@@ -43,6 +45,7 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.TravelExplore
+import androidx.compose.material.icons.filled.Tune
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -71,12 +74,14 @@ import com.example.auramusic.ui.components.PixelAddToPlaylistSheet
 import com.example.auramusic.ui.components.PixelAlbumCard
 import com.example.auramusic.ui.components.PixelAlbumDetailSheet
 import com.example.auramusic.ui.components.PixelAtAGlanceHeader
+import com.example.auramusic.ui.components.PixelAudioRouteSheet
 import com.example.auramusic.ui.components.PixelBottomNavBar
 import com.example.auramusic.ui.components.PixelCreatePlaylistDialog
 import com.example.auramusic.ui.components.PixelExpandedPlayer
 import com.example.auramusic.ui.components.PixelMiniPlayer
 import com.example.auramusic.ui.components.PixelNavTab
 import com.example.auramusic.ui.components.PixelQueueSheet
+import com.example.auramusic.ui.components.PixelSleepTimerDialog
 import com.example.auramusic.ui.components.PixelSquircleAlbumArt
 import com.example.auramusic.ui.components.PixelTrackTile
 
@@ -103,6 +108,7 @@ fun MainScreen(
         val filteredAlbums by viewModel.filteredAlbums.collectAsState()
         val recommendations by viewModel.recommendations.collectAsState()
         val playlists by viewModel.playlists.collectAsState()
+        val favoriteTrackIds by viewModel.favoriteTrackIds.collectAsState()
 
         val selectedAlbum by viewModel.selectedAlbum.collectAsState()
         val isAlbumSheetVisible by viewModel.isAlbumSheetVisible.collectAsState()
@@ -113,7 +119,11 @@ fun MainScreen(
 
         val isExpandedPlayer by viewModel.isExpandedPlayer.collectAsState()
         val isQueueVisible by viewModel.isQueueVisible.collectAsState()
+        val isAudioRouteSheetVisible by viewModel.isAudioRouteSheetVisible.collectAsState()
+        val isSleepTimerDialogVisible by viewModel.isSleepTimerDialogVisible.collectAsState()
+        val selectedCategory by viewModel.selectedCategory.collectAsState()
 
+        val sourceFilterChips = listOf("All Tracks", "Spotify", "YouTube Music", "Lossless FLAC", "Albums")
         val genreExploreChips = listOf("All", "Top Hits", "Pop", "Rock", "Lo-Fi", "Hip-Hop", "Electronic", "Ambient", "Classical")
 
         Box(
@@ -134,8 +144,10 @@ fun MainScreen(
                     qualityBadge = playerState.currentTrack?.qualityBadge ?: "24-BIT FLAC",
                     isTravelMode = playerState.isTravelModeEnabled,
                     isDarkMode = isDarkMode,
+                    activeAudioDevice = playerState.activeAudioOutputDevice,
                     onTravelModeToggle = { viewModel.toggleTravelMode() },
-                    onThemeToggle = { viewModel.toggleThemeMode() }
+                    onThemeToggle = { viewModel.toggleThemeMode() },
+                    onAudioRouteClick = { viewModel.openAudioRouteSheet() }
                 )
 
                 // Main Scrollable Area per Active Tab
@@ -402,6 +414,37 @@ fun MainScreen(
                             }
                         }
 
+                        // Source & Format Filter Chips Row (Spotify, YouTube, Lossless, Albums)
+                        item {
+                            LazyRow(
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                modifier = Modifier.fillMaxWidth()
+                            ) {
+                                items(sourceFilterChips) { filter ->
+                                    val isSelected = selectedCategory.equals(filter, ignoreCase = true)
+                                    Box(
+                                        contentAlignment = Alignment.Center,
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(18.dp))
+                                            .background(if (isSelected) colors.activePillBackground else colors.surfaceContainer)
+                                            .border(1.dp, if (isSelected) colors.activePillBackground else colors.outlineVariant, RoundedCornerShape(18.dp))
+                                            .clickable {
+                                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                                                viewModel.setCategory(filter)
+                                            }
+                                            .padding(horizontal = 14.dp, vertical = 7.dp)
+                                        ) {
+                                        Text(
+                                            text = filter,
+                                            fontSize = 11.sp,
+                                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                            color = if (isSelected) colors.activePillText else colors.textPrimary
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
                         // Genre Quick Chips Row
                         item {
                             LazyRow(
@@ -420,7 +463,7 @@ fun MainScreen(
                                                 haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
                                                 if (genre == "All") viewModel.setSearchQuery("") else viewModel.setSearchQuery(genre)
                                             }
-                                            .padding(horizontal = 14.dp, vertical = 8.dp)
+                                            .padding(horizontal = 14.dp, vertical = 7.dp)
                                     ) {
                                         Text(
                                             text = genre,
@@ -723,20 +766,41 @@ fun MainScreen(
                                                 color = colors.textSecondary
                                             )
                                         }
-                                        IconButton(onClick = { viewModel.playPlaylist(pl) }) {
-                                            Box(
-                                                contentAlignment = Alignment.Center,
-                                                modifier = Modifier
-                                                    .size(34.dp)
-                                                    .clip(RoundedCornerShape(12.dp))
-                                                    .background(colors.activePillBackground)
-                                            ) {
-                                                Icon(
-                                                    imageVector = Icons.Default.PlayArrow,
-                                                    contentDescription = "Play",
-                                                    tint = colors.activePillText,
-                                                    modifier = Modifier.size(18.dp)
-                                                )
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            if (pl.id != "pl_default_fav") {
+                                                IconButton(
+                                                    onClick = {
+                                                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                                        viewModel.deletePlaylist(pl.id)
+                                                        Toast.makeText(context, "Deleted ${pl.name}", Toast.LENGTH_SHORT).show()
+                                                    },
+                                                    modifier = Modifier.size(34.dp)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.Delete,
+                                                        contentDescription = "Delete",
+                                                        tint = colors.textTertiary,
+                                                        modifier = Modifier.size(18.dp)
+                                                    )
+                                                }
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                            }
+
+                                            IconButton(onClick = { viewModel.playPlaylist(pl) }) {
+                                                Box(
+                                                    contentAlignment = Alignment.Center,
+                                                    modifier = Modifier
+                                                        .size(34.dp)
+                                                        .clip(RoundedCornerShape(12.dp))
+                                                        .background(colors.activePillBackground)
+                                                ) {
+                                                    Icon(
+                                                        imageVector = Icons.Default.PlayArrow,
+                                                        contentDescription = "Play",
+                                                        tint = colors.activePillText,
+                                                        modifier = Modifier.size(18.dp)
+                                                    )
+                                                }
                                             }
                                         }
                                     }
@@ -991,6 +1055,146 @@ fun MainScreen(
                             }
                         }
 
+                        // Audio Output & Spatial Equalizer Card
+                        item {
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(24.dp))
+                                    .background(colors.cardBackground)
+                                    .border(1.dp, colors.outlineVariant, RoundedCornerShape(24.dp))
+                                    .padding(18.dp)
+                            ) {
+                                Column {
+                                    Row(
+                                        verticalAlignment = Alignment.CenterVertically,
+                                        horizontalArrangement = Arrangement.SpaceBetween,
+                                        modifier = Modifier.fillMaxWidth()
+                                    ) {
+                                        Row(verticalAlignment = Alignment.CenterVertically) {
+                                            Box(
+                                                contentAlignment = Alignment.Center,
+                                                modifier = Modifier
+                                                    .size(40.dp)
+                                                    .clip(RoundedCornerShape(12.dp))
+                                                    .background(colors.surfaceContainer)
+                                            ) {
+                                                Icon(
+                                                    imageVector = Icons.Default.GraphicEq,
+                                                    contentDescription = "Equalizer",
+                                                    tint = colors.textPrimary,
+                                                    modifier = Modifier.size(20.dp)
+                                                )
+                                            }
+                                            Spacer(modifier = Modifier.width(12.dp))
+                                            Column {
+                                                Text(
+                                                    text = "Equalizer & Spatial Audio",
+                                                    fontSize = 15.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = colors.textPrimary
+                                                )
+                                                Text(
+                                                    text = "Active: ${playerState.activeAudioOutputDevice}",
+                                                    fontSize = 12.sp,
+                                                    color = colors.textSecondary
+                                                )
+                                            }
+                                        }
+
+                                        Box(
+                                            contentAlignment = Alignment.Center,
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(16.dp))
+                                                .background(colors.activePillBackground)
+                                                .clickable {
+                                                    haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                                                    viewModel.openAudioRouteSheet()
+                                                }
+                                                .padding(horizontal = 14.dp, vertical = 8.dp)
+                                        ) {
+                                            Text(
+                                                text = "Configure",
+                                                fontSize = 12.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = colors.activePillText
+                                            )
+                                        }
+                                    }
+                                }
+                            }
+                        }
+
+                        // Sleep Timer Card
+                        item {
+                            val sleepSec = playerState.sleepTimerRemainingSec
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .clip(RoundedCornerShape(24.dp))
+                                    .background(colors.cardBackground)
+                                    .border(1.dp, colors.outlineVariant, RoundedCornerShape(24.dp))
+                                    .padding(18.dp)
+                            ) {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                        Box(
+                                            contentAlignment = Alignment.Center,
+                                            modifier = Modifier
+                                                .size(40.dp)
+                                                .clip(RoundedCornerShape(12.dp))
+                                                .background(colors.surfaceContainer)
+                                        ) {
+                                            Icon(
+                                                imageVector = Icons.Default.Bedtime,
+                                                contentDescription = "Sleep Timer",
+                                                tint = colors.textPrimary,
+                                                modifier = Modifier.size(20.dp)
+                                            )
+                                        }
+                                        Spacer(modifier = Modifier.width(12.dp))
+                                        Column {
+                                            Text(
+                                                text = "Sleep Timer",
+                                                fontSize = 15.sp,
+                                                fontWeight = FontWeight.Bold,
+                                                color = colors.textPrimary
+                                            )
+                                            Text(
+                                                text = if (sleepSec != null && sleepSec > 0) "%d:%02d remaining".format(sleepSec / 60, sleepSec % 60) else "Off",
+                                                fontSize = 12.sp,
+                                                color = colors.textSecondary
+                                            )
+                                        }
+                                    }
+
+                                    Box(
+                                        contentAlignment = Alignment.Center,
+                                        modifier = Modifier
+                                            .clip(RoundedCornerShape(16.dp))
+                                            .background(colors.surfaceContainer)
+                                            .border(1.dp, colors.outlineVariant, RoundedCornerShape(16.dp))
+                                            .clickable {
+                                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                                                viewModel.openSleepTimerDialog()
+                                            }
+                                            .padding(horizontal = 14.dp, vertical = 8.dp)
+                                    ) {
+                                        Text(
+                                            text = if (sleepSec != null && sleepSec > 0) "Adjust" else "Set Timer",
+                                            fontSize = 12.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = colors.textPrimary
+                                        )
+                                    }
+                                }
+                            }
+                        }
+
                         // About Card
                         item {
                             Box(
@@ -1058,6 +1262,8 @@ fun MainScreen(
             ) {
                 PixelExpandedPlayer(
                     playerState = playerState,
+                    isFavorite = playerState.currentTrack?.let { favoriteTrackIds.contains(it.id) } == true,
+                    onToggleFavorite = { playerState.currentTrack?.let { viewModel.toggleFavorite(it) } },
                     onPlayPauseClick = { viewModel.togglePlayPause() },
                     onSkipNextClick = { viewModel.skipNext() },
                     onSkipPreviousClick = { viewModel.skipPrevious() },
@@ -1066,7 +1272,10 @@ fun MainScreen(
                     onToggleRepeat = { viewModel.toggleRepeat() },
                     onSpeedChange = { viewModel.setPlaybackSpeed(it) },
                     onCollapseClick = { viewModel.setExpandedPlayer(false) },
-                    onQueueClick = { viewModel.setQueueVisible(true) }
+                    onQueueClick = { viewModel.setQueueVisible(true) },
+                    onAudioRouteClick = { viewModel.openAudioRouteSheet() },
+                    onMoreOptionsClick = { viewModel.openSleepTimerDialog() },
+                    activeAudioDevice = playerState.activeAudioOutputDevice
                 )
             }
 
@@ -1083,9 +1292,29 @@ fun MainScreen(
                     isPlaying = playerState.isPlaying,
                     onTrackClick = { viewModel.playTrack(it) },
                     onCloseClick = { viewModel.setQueueVisible(false) },
-                    onShuffleClick = { viewModel.toggleShuffle() }
+                    onShuffleClick = { viewModel.toggleShuffle() },
+                    onClearQueue = { viewModel.clearQueue() },
+                    onRemoveTrack = { viewModel.removeFromQueue(it.id) }
                 )
             }
+
+            // Audio Output Route & Hardware EQ Bottom Sheet
+            PixelAudioRouteSheet(
+                visible = isAudioRouteSheetVisible,
+                activeDeviceName = playerState.activeAudioOutputDevice,
+                audioSessionId = viewModel.getAudioSessionId(),
+                onDeviceSelected = { viewModel.setActiveAudioOutputDevice(it) },
+                onDismiss = { viewModel.closeAudioRouteSheet() },
+                modifier = Modifier.align(Alignment.BottomCenter)
+            )
+
+            // Sleep Timer Dialog
+            PixelSleepTimerDialog(
+                visible = isSleepTimerDialogVisible,
+                remainingSeconds = playerState.sleepTimerRemainingSec,
+                onSetTimer = { viewModel.setSleepTimer(it) },
+                onDismiss = { viewModel.closeSleepTimerDialog() }
+            )
 
             // Online Album Detail Sheet
             selectedAlbum?.let { album ->

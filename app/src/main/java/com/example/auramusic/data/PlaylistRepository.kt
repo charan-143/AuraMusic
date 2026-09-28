@@ -18,8 +18,17 @@ class PlaylistRepository(private val context: Context, private val audioReposito
     private val _playlists = MutableStateFlow<List<Playlist>>(emptyList())
     val playlists: StateFlow<List<Playlist>> = _playlists.asStateFlow()
 
+    private val _favoriteTrackIds = MutableStateFlow<Set<String>>(emptySet())
+    val favoriteTrackIds: StateFlow<Set<String>> = _favoriteTrackIds.asStateFlow()
+
     init {
+        loadFavorites()
         loadPlaylists()
+    }
+
+    private fun loadFavorites() {
+        val saved = prefs.getStringSet("aura_favorite_track_ids", emptySet()) ?: emptySet()
+        _favoriteTrackIds.value = saved.toSet()
     }
 
     private fun loadPlaylists() {
@@ -157,5 +166,25 @@ class PlaylistRepository(private val context: Context, private val audioReposito
         val updated = _playlists.value.filter { it.id != playlistId }
         _playlists.value = updated
         savePlaylists(updated)
+    }
+
+    fun isFavorite(trackId: String): Boolean {
+        return _favoriteTrackIds.value.contains(trackId)
+    }
+
+    fun toggleFavorite(track: Track): Boolean {
+        val current = _favoriteTrackIds.value.toMutableSet()
+        val isNowFav = if (current.contains(track.id)) {
+            current.remove(track.id)
+            removeTrackFromPlaylist("pl_default_fav", track.id)
+            false
+        } else {
+            current.add(track.id)
+            addTrackToPlaylist("pl_default_fav", track)
+            true
+        }
+        _favoriteTrackIds.value = current
+        prefs.edit().putStringSet("aura_favorite_track_ids", current).apply()
+        return isNowFav
     }
 }

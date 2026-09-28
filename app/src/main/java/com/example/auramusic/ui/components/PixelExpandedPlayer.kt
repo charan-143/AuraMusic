@@ -69,6 +69,8 @@ import com.example.auramusic.theme.PixelMotion
 @Composable
 fun PixelExpandedPlayer(
     playerState: PlayerState,
+    isFavorite: Boolean = false,
+    onToggleFavorite: () -> Unit = {},
     onPlayPauseClick: () -> Unit,
     onSkipNextClick: () -> Unit,
     onSkipPreviousClick: () -> Unit,
@@ -78,11 +80,13 @@ fun PixelExpandedPlayer(
     onSpeedChange: (Float) -> Unit,
     onCollapseClick: () -> Unit,
     onQueueClick: () -> Unit,
+    onAudioRouteClick: () -> Unit = {},
+    onMoreOptionsClick: () -> Unit = {},
+    activeAudioDevice: String = "Pixel Buds Pro",
     modifier: Modifier = Modifier
 ) {
     val haptic = LocalHapticFeedback.current
     val track = playerState.currentTrack ?: return
-    var isFavorite by remember { mutableStateOf(false) }
 
     val playInteractionSource = remember { MutableInteractionSource() }
     val isPlayPressed by playInteractionSource.collectIsPressedAsState()
@@ -139,6 +143,7 @@ fun PixelExpandedPlayer(
             IconButton(
                 onClick = {
                     haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                    onMoreOptionsClick()
                 },
                 modifier = Modifier.size(40.dp)
             ) {
@@ -218,8 +223,8 @@ fun PixelExpandedPlayer(
 
             IconButton(
                 onClick = {
-                    isFavorite = !isFavorite
                     haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                    onToggleFavorite()
                 }
             ) {
                 Icon(
@@ -398,13 +403,17 @@ fun PixelExpandedPlayer(
                 )
             }
 
-            // Audio Device Indicator
+            // Audio Device Indicator Pill
             Row(
                 verticalAlignment = Alignment.CenterVertically,
                 modifier = Modifier
                     .clip(RoundedCornerShape(percent = 50))
                     .background(MonochromeSurfaceContainer)
                     .border(1.dp, MonochromeOutlineVariant, RoundedCornerShape(percent = 50))
+                    .clickable {
+                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                        onAudioRouteClick()
+                    }
                     .padding(horizontal = 12.dp, vertical = 6.dp)
             ) {
                 Icon(
@@ -415,10 +424,12 @@ fun PixelExpandedPlayer(
                 )
                 Spacer(modifier = Modifier.width(6.dp))
                 Text(
-                    text = "Pixel Buds Pro",
+                    text = activeAudioDevice,
                     fontSize = 11.sp,
                     fontWeight = FontWeight.Medium,
-                    color = MonochromeSilver
+                    color = MonochromeSilver,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis
                 )
             }
 

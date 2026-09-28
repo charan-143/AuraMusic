@@ -216,6 +216,88 @@ class MusicPlayerManager(private val context: Context) {
         _playerState.update { it.copy(playbackSpeed = speed) }
     }
 
+    fun getAudioSessionId(): Int {
+        return exoPlayer.audioSessionId
+    }
+
+    fun setActiveAudioOutputDevice(name: String) {
+        _playerState.update { it.copy(activeAudioOutputDevice = name) }
+    }
+
+    fun clearQueue() {
+        val current = _playerState.value.currentTrack
+        _playerState.update {
+            it.copy(
+                queue = if (current != null) listOf(current) else emptyList(),
+                currentIndex = 0
+            )
+        }
+    }
+
+    fun addToQueue(track: Track) {
+        val currentQueue = _playerState.value.queue
+        if (currentQueue.any { it.id == track.id }) return
+        _playerState.update { it.copy(queue = currentQueue + track) }
+    }
+
+    fun removeFromQueue(trackId: String) {
+        val state = _playerState.value
+        val newQueue = state.queue.filter { it.id != trackId }
+        if (newQueue.isEmpty()) {
+            pause()
+            _playerState.update {
+                it.copy(
+                    queue = emptyList(),
+                    currentTrack = null,
+                    currentIndex = 0,
+                    isPlaying = false,
+                    currentPositionMs = 0L
+                )
+            }
+            return
+        }
+        val isRemovingCurrent = state.currentTrack?.id == trackId
+        val newIndex = if (isRemovingCurrent) {
+            state.currentIndex.coerceAtMost(newQueue.lastIndex)
+        } else {
+            newQueue.indexOfFirst { it.id == state.currentTrack?.id }.coerceAtLeast(0)
+        }
+        val nextTrack = if (isRemovingCurrent) newQueue[newIndex] else state.currentTrack
+        _playerState.update {
+            it.copy(
+                queue = newQueue,
+                currentIndex = newIndex,
+                currentTrack = nextTrack
+            )
+        }
+        if (isRemovingCurrent && nextTrack != null) {
+            playTrack(nextTrack, newQueue)
+        }
+    }
+
+    private var sleepTimerJob: Job? = null
+
+    fun setSleepTimer(minutes: Int) {
+        sleepTimerJob?.cancel()
+        if (minutes <= 0) {
+            _playerState.update { it.copy(sleepTimerRemainingSec = null) }
+            return
+        }
+        var remainingSec = minutes * 60
+        _playerState.update { it.copy(sleepTimerRemainingSec = remainingSec) }
+        sleepTimerJob = scope.launch {
+            while (remainingSec > 0 && isActive) {
+                delay(1000)
+                remainingSec--
+                _playerState.update { it.copy(sleepTimerRemainingSec = remainingSec) }
+            }
+            if (remainingSec <= 0) {
+                pause()
+                _playerState.update { it.copy(sleepTimerRemainingSec = null) }
+            }
+        }
+    }
+
     private fun startTicker() {
         stopTicker()
         positionTickerJob = scope.launch {
