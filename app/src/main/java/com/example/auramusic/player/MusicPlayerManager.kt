@@ -6,6 +6,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import com.example.auramusic.audio.EqualizerManager
 import com.example.auramusic.cache.AdaptiveAudioCacheManager
 import com.example.auramusic.model.AudioBitrateMode
 import com.example.auramusic.model.Track
@@ -26,6 +27,7 @@ class MusicPlayerManager(private val context: Context) {
     private var positionTickerJob: Job? = null
 
     val cacheManager by lazy { AdaptiveAudioCacheManager(context) }
+    val equalizerManager by lazy { EqualizerManager(context) }
 
     private val exoPlayer: ExoPlayer by lazy {
         val mediaSourceFactory = DefaultMediaSourceFactory(cacheManager.cacheDataSourceFactory)
@@ -37,6 +39,12 @@ class MusicPlayerManager(private val context: Context) {
             .build()
             .apply {
                 addListener(object : Player.Listener {
+                    override fun onAudioSessionIdChanged(audioSessionId: Int) {
+                        if (audioSessionId > 0) {
+                            equalizerManager.attachToSession(audioSessionId)
+                        }
+                    }
+
                     override fun onIsPlayingChanged(isPlaying: Boolean) {
                         _playerState.update { it.copy(isPlaying = isPlaying) }
                         if (isPlaying) {
@@ -61,6 +69,26 @@ class MusicPlayerManager(private val context: Context) {
                     }
                 })
             }
+    }
+
+    init {
+        scope.launch {
+            equalizerManager.state.collect { eqState ->
+                val badge = if (!eqState.isEnabled) {
+                    "EQ OFF"
+                } else if (eqState.isAiMode) {
+                    "AI ✦ ${eqState.detectedProfileName.uppercase().take(12)}"
+                } else {
+                    "EQ ${eqState.currentPreset.displayName.uppercase()}"
+                }
+                _playerState.update {
+                    it.copy(
+                        isEqualizerEnabled = eqState.isEnabled,
+                        equalizerProfileBadge = badge
+                    )
+                }
+            }
+        }
     }
 
     private val _playerState = MutableStateFlow(PlayerState())
@@ -101,6 +129,11 @@ class MusicPlayerManager(private val context: Context) {
 
         // Trigger background preloading of upcoming tracks for seamless traveling
         cacheManager.prefetchUpcomingTracks(queue, index)
+
+        equalizerManager.onTrackChanged(track)
+        if (exoPlayer.audioSessionId > 0) {
+            equalizerManager.attachToSession(exoPlayer.audioSessionId)
+        }
 
         if (track.audioUrl.isNotBlank()) {
             try {
@@ -241,6 +274,7 @@ class MusicPlayerManager(private val context: Context) {
 
         // Dynamically update stream request headers
         cacheManager.updateStreamingQualityHeaders(autoQuality.targetBitrateKbps)
+        equalizerManager.onStreamingQualityAdapted(bitrateMode.label)
 
         _playerState.update {
             it.copy(
@@ -429,6 +463,7 @@ class MusicPlayerManager(private val context: Context) {
 
     fun release() {
         stopTicker()
+        equalizerManager.release()
         exoPlayer.release()
     }
 }

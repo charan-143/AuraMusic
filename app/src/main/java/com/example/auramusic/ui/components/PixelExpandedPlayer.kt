@@ -23,6 +23,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.GraphicEq
 import androidx.compose.material.icons.filled.Headphones
 import androidx.compose.material.icons.filled.KeyboardArrowDown
 import androidx.compose.material.icons.filled.MoreVert
@@ -82,6 +83,7 @@ fun PixelExpandedPlayer(
     onQueueClick: () -> Unit,
     onAudioRouteClick: () -> Unit = {},
     onMoreOptionsClick: () -> Unit = {},
+    onEqualizerClick: () -> Unit = {},
     activeAudioDevice: String = "Pixel Buds Pro",
     modifier: Modifier = Modifier
 ) {
@@ -140,19 +142,36 @@ fun PixelExpandedPlayer(
                 )
             }
 
-            IconButton(
-                onClick = {
-                    haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                    onMoreOptionsClick()
-                },
-                modifier = Modifier.size(40.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.MoreVert,
-                    contentDescription = "Options",
-                    tint = MonochromeWhite,
-                    modifier = Modifier.size(22.dp)
-                )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                IconButton(
+                    onClick = {
+                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                        onEqualizerClick()
+                    },
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.GraphicEq,
+                        contentDescription = "Equalizer",
+                        tint = if (playerState.isEqualizerEnabled) MonochromeWhite else MonochromeSilver,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+
+                IconButton(
+                    onClick = {
+                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                        onMoreOptionsClick()
+                    },
+                    modifier = Modifier.size(40.dp)
+                ) {
+                    Icon(
+                        imageVector = Icons.Default.MoreVert,
+                        contentDescription = "Options",
+                        tint = MonochromeWhite,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
             }
         }
 
@@ -216,6 +235,28 @@ fun PixelExpandedPlayer(
                             fontWeight = FontWeight.Bold,
                             color = MonochromeWhite,
                             letterSpacing = 0.6.sp
+                        )
+                    }
+
+                    Spacer(modifier = Modifier.width(6.dp))
+
+                    Box(
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(6.dp))
+                            .background(MonochromeSurfaceContainer)
+                            .border(1.dp, MonochromeOutlineVariant, RoundedCornerShape(6.dp))
+                            .clickable {
+                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                                onEqualizerClick()
+                            }
+                            .padding(horizontal = 6.dp, vertical = 2.dp)
+                    ) {
+                        Text(
+                            text = playerState.equalizerProfileBadge,
+                            fontSize = 8.sp,
+                            fontWeight = FontWeight.Bold,
+                            color = MonochromeWhite,
+                            letterSpacing = 0.5.sp
                         )
                     }
                 }

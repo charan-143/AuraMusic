@@ -73,6 +73,7 @@ fun PixelAudioRouteSheet(
     audioSessionId: Int,
     onDeviceSelected: (String) -> Unit,
     onDismiss: () -> Unit,
+    onEqualizerClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val context = LocalContext.current
@@ -323,21 +324,7 @@ fun PixelAudioRouteSheet(
                             .border(1.dp, MonochromeOutlineVariant, RoundedCornerShape(14.dp))
                             .clickable {
                                 haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                                try {
-                                    val intent = Intent(AudioEffect.ACTION_DISPLAY_AUDIO_EFFECT_CONTROL_PANEL).apply {
-                                        putExtra(AudioEffect.EXTRA_AUDIO_SESSION, audioSessionId)
-                                        putExtra(AudioEffect.EXTRA_PACKAGE_NAME, context.packageName)
-                                        putExtra(AudioEffect.EXTRA_CONTENT_TYPE, AudioEffect.CONTENT_TYPE_MUSIC)
-                                    }
-                                    context.startActivity(intent)
-                                } catch (e: Exception) {
-                                    // Fallback to sound settings
-                                    try {
-                                        context.startActivity(Intent(Settings.ACTION_SOUND_SETTINGS))
-                                    } catch (e2: Exception) {
-                                        Toast.makeText(context, "Dolby Atmos / Sound FX Active", Toast.LENGTH_SHORT).show()
-                                    }
-                                }
+                                onEqualizerClick()
                             }
                     ) {
                         Row(verticalAlignment = Alignment.CenterVertically) {

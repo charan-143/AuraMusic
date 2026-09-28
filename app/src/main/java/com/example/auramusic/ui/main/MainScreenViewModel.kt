@@ -501,6 +501,52 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
 
     fun addToQueue(track: Track) = playerManager.addToQueue(track)
 
+    // Equalizer Controls
+    val equalizerState = playerManager.equalizerManager.state
+
+    private val _isEqualizerSheetVisible = MutableStateFlow(false)
+    val isEqualizerSheetVisible: StateFlow<Boolean> = _isEqualizerSheetVisible.asStateFlow()
+
+    fun openEqualizerSheet() {
+        _isEqualizerSheetVisible.value = true
+    }
+
+    fun closeEqualizerSheet() {
+        _isEqualizerSheetVisible.value = false
+    }
+
+    fun setEqualizerEnabled(enabled: Boolean) {
+        playerManager.equalizerManager.setEnabled(enabled)
+    }
+
+    fun setEqualizerAiMode(isAiMode: Boolean) {
+        playerManager.equalizerManager.setAiMode(isAiMode)
+    }
+
+    fun setEqualizerAiTarget(target: com.example.auramusic.audio.AiAudioTarget) {
+        playerManager.equalizerManager.setAiTarget(target)
+    }
+
+    fun setEqualizerBandLevel(bandIndex: Int, levelMilliBels: Int) {
+        playerManager.equalizerManager.setBandLevel(bandIndex, levelMilliBels)
+    }
+
+    fun setEqualizerBassBoost(strength: Int) {
+        playerManager.equalizerManager.setBassBoost(strength)
+    }
+
+    fun setEqualizerVirtualizer(strength: Int) {
+        playerManager.equalizerManager.setVirtualizer(strength)
+    }
+
+    fun applyEqualizerPreset(preset: com.example.auramusic.audio.EqualizerPreset) {
+        playerManager.equalizerManager.applyPreset(preset)
+    }
+
+    fun resetEqualizerToFlat() {
+        playerManager.equalizerManager.resetToFlat()
+    }
+
     override fun onCleared() {
         super.onCleared()
         searchJob?.cancel()

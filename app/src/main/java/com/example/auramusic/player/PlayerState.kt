@@ -26,7 +26,9 @@ data class PlayerState(
     val signalStrengthPercent: Int = 95,
     val linkBandwidthKbps: Int = 15000,
     val autoQualitySwitchNote: String = "Auto: 24-bit FLAC active",
-    val isSignalFluctuating: Boolean = false
+    val isSignalFluctuating: Boolean = false,
+    val isEqualizerEnabled: Boolean = true,
+    val equalizerProfileBadge: String = "AI ✦ CINEMATIC"
 ) {
     val progress: Float
         get() = if (durationMs > 0) (currentPositionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) else 0f
