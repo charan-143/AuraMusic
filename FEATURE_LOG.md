@@ -226,6 +226,80 @@ This document provides a record of all features, architectural milestones, UI/UX
 
 ---
 
+### [FEAT-014] Multi-Source Streaming Engine (Spotify, YouTube Music, Lossless FLAC)
+- **Date**: 2026-09-28
+- **Category**: Audio Engine / Streaming
+- **Status**: COMPLETE
+- **Files Affected**:
+  - `app/src/main/java/com/example/auramusic/model/Track.kt`
+  - `app/src/main/java/com/example/auramusic/data/AudioRepository.kt`
+  - `app/src/main/java/com/example/auramusic/ui/main/MainScreenViewModel.kt`
+- **Description**:
+  Architected multi-source audio streaming supporting:
+  - `StreamingSource` enumeration (`SPOTIFY`, `YOUTUBE_MUSIC`, `LOSSLESS_FLAC`, `LOCAL_STORAGE`).
+  - Bitrate tier metadata (`FLAC 24-bit 96kHz`, `Spotify 320kbps`, `YT Music Opus 256k`).
+  - High-resolution audio stream endpoints for live playback and network testing.
+  - Quality badge pill rendering on track cards and player screens.
+- **Verification**: Unit tests passed; verified in ExoPlayer engine and UI.
+
+---
+
+### [FEAT-015] Resilient Travel & Roaming Audio Cache Architecture
+- **Date**: 2026-09-28
+- **Category**: Cache & Data Resilience
+- **Status**: COMPLETE
+- **Files Affected**:
+  - `app/src/main/java/com/example/auramusic/cache/AdaptiveAudioCacheManager.kt`
+  - `app/src/main/java/com/example/auramusic/player/MusicPlayerManager.kt`
+  - `app/src/main/java/com/example/auramusic/player/PlayerState.kt`
+- **Description**:
+  Engineered zero-drop playback resilience for traveling, roaming, tunnels, and weak cellular signal:
+  - 1 GB persistent cache via Media3 `SimpleCache` with `LeastRecentlyUsedCacheEvictor` and `StandaloneDatabaseProvider`.
+  - `CacheDataSource.Factory` intercepting all streaming requests with upstream `DefaultHttpDataSource`.
+  - Extended Travel Mode `DefaultLoadControl`: minimum buffer 60,000ms (1 min), maximum lookahead buffer 300,000ms (5 mins!), back-buffer 60,000ms (1 min).
+  - Asynchronous predictive pre-caching (`prefetchUpcomingTracks`) fetching the upcoming 2 tracks in background queue during playback.
+- **Verification**: Verified via test build and buffer state propagation in `PlayerState`.
+
+---
+
+### [FEAT-016] Cellular Roaming & Network Fluctuation Observer
+- **Date**: 2026-09-28
+- **Category**: Network & Telephony
+- **Status**: COMPLETE
+- **Files Affected**:
+  - `app/src/main/java/com/example/auramusic/network/NetworkQualityObserver.kt`
+  - `app/src/main/java/com/example/auramusic/player/MusicPlayerManager.kt`
+- **Description**:
+  Reactive connectivity observer querying `ConnectivityManager` and `NetworkCapabilities`:
+  - Detects Cellular Roaming (`NET_CAPABILITY_NOT_ROAMING` inverted flag).
+  - Classifies network tiers: `OFFLINE`, `CELLULAR_ROAMING_LOW`, `CELLULAR_4G_5G_NORMAL`, `WIFI_UNLIMITED`.
+  - Automatically switches between `LOSSLESS_MASTER` and `BALANCED_ROAMING` (to conserve roaming costs or throttle buffer size).
+  - Emits real-time network status string (`"5G Roaming • Travel Shield Active"`).
+- **Verification**: Verified via mock and live callbacks on Android.
+
+---
+
+### [FEAT-017] Travel Mode Shield UI & Squiggly Secondary Buffer Seekbar
+- **Date**: 2026-09-28
+- **Category**: UI Component / Animation
+- **Status**: COMPLETE
+- **Files Affected**:
+  - `app/src/main/java/com/example/auramusic/ui/components/PixelSquigglySeekbar.kt`
+  - `app/src/main/java/com/example/auramusic/ui/components/PixelAtAGlanceHeader.kt`
+  - `app/src/main/java/com/example/auramusic/ui/components/PixelExpandedPlayer.kt`
+  - `app/src/main/java/com/example/auramusic/ui/components/PixelTrackTile.kt`
+  - `app/src/main/java/com/example/auramusic/ui/main/MainScreen.kt`
+  - `preview.html`
+- **Description**:
+  Visual indicators and controls for traveling and streaming:
+  - Secondary buffer bar on `PixelSquigglySeekbar.kt` showing lookahead pre-buffered chunk.
+  - Travel Shield toggle button in Expanded Player allowing user to turn 5-minute pre-buffering on/off.
+  - At-a-Glance header displaying network quality, roaming badge, and buffer readiness.
+  - Source pills (`Spotify`, `YT Music`, `Lossless`) with monochrome border accents.
+- **Verification**: Deployed to Motorola Edge 50 Pro; verified interactive preview in `preview.html`.
+
+---
+
 ## 3. Change Tracking Guidelines for New Features
 
 When adding or modifying features in the future, append an entry following this format:
