@@ -300,6 +300,80 @@ This document provides a record of all features, architectural milestones, UI/UX
 
 ---
 
+### [FEAT-018] Online Multi-Source Albums Architecture & Search
+- **Date**: 2026-09-28
+- **Category**: Audio Engine / Data & Search
+- **Status**: COMPLETE
+- **Files Affected**:
+  - `app/src/main/java/com/example/auramusic/model/Album.kt`
+  - `app/src/main/java/com/example/auramusic/data/AudioRepository.kt`
+  - `app/src/main/java/com/example/auramusic/ui/main/MainScreenViewModel.kt`
+  - `app/src/main/java/com/example/auramusic/ui/components/PixelAlbumCard.kt`
+- **Description**:
+  Introduced full online album architecture representing studio albums from Spotify, YouTube Music, and Lossless FLAC:
+  - Supports searching both **Songs** and **Albums** simultaneously.
+  - Interactive squircle Album cards displaying cover art, source badge, artist, and track count.
+  - Ability to play an entire album sequentially or shuffled into the ExoPlayer queue.
+- **Verification**: Verified via testDebugUnitTest and search queries in Compose UI.
+
+---
+
+### [FEAT-019] Algorithmic Music & Album Recommendation Engine
+- **Date**: 2026-09-28
+- **Category**: Recommendations & Machine Learning
+- **Status**: COMPLETE
+- **Files Affected**:
+  - `app/src/main/java/com/example/auramusic/recommendation/RecommendationEngine.kt`
+  - `app/src/main/java/com/example/auramusic/model/RecommendationFeed.kt`
+  - `app/src/main/java/com/example/auramusic/ui/main/MainScreenViewModel.kt`
+- **Description**:
+  Developed dynamic recommendation feeds for online music:
+  - "Recommended For You": dynamically adapts to currently playing track, artist similarity, and streaming source.
+  - "Trending on Spotify": popular Spotify 320k albums (*Starboy*, *Lofi Study Beats*) and tracks.
+  - "Hot on YouTube Music": top YouTube Music Opus HD albums (*Interstellar OST*, *Odyssey*) and tracks.
+  - "Lossless Masterworks": audiophile uncompressed 24-bit FLAC albums (*Audiophile Sessions*, *Material Echoes*).
+- **Verification**: Tested reactive state flow emitting recommendation sections in `MainScreenViewModel`.
+
+---
+
+### [FEAT-020] User Custom Playlists & Custom Albums Creation
+- **Date**: 2026-09-28
+- **Category**: Data & Storage / User Collections
+- **Status**: COMPLETE
+- **Files Affected**:
+  - `app/src/main/java/com/example/auramusic/model/Playlist.kt`
+  - `app/src/main/java/com/example/auramusic/data/PlaylistRepository.kt`
+  - `app/src/main/java/com/example/auramusic/ui/components/PixelCreatePlaylistDialog.kt`
+  - `app/src/main/java/com/example/auramusic/ui/components/PixelAddToPlaylistSheet.kt`
+- **Description**:
+  Comprehensive custom collection builder allowing users to:
+  - Create new custom Playlists or custom Albums with Title, Description, and type tags.
+  - Add/remove songs from Spotify, YouTube Music, or local storage into any playlist or custom album.
+  - Persistent JSON storage via `SharedPreferences` so collections survive app reboots.
+  - Play custom playlist or album with single tap.
+- **Verification**: Verified persistence and queue playback.
+
+---
+
+### [FEAT-021] Pixel Monochrome Album Detail & Playlist Sheets
+- **Date**: 2026-09-28
+- **Category**: UI Component / Navigation
+- **Status**: COMPLETE
+- **Files Affected**:
+  - `app/src/main/java/com/example/auramusic/ui/components/PixelAlbumDetailSheet.kt`
+  - `app/src/main/java/com/example/auramusic/ui/components/PixelAddToPlaylistSheet.kt`
+  - `app/src/main/java/com/example/auramusic/ui/components/PixelCreatePlaylistDialog.kt`
+  - `app/src/main/java/com/example/auramusic/ui/main/MainScreen.kt`
+  - `preview.html`
+- **Description**:
+  Full-screen and bottom-sheet interactive experiences designed to Google Pixel Monochrome aesthetics:
+  - `PixelAlbumDetailSheet`: shows large squircle cover, metadata, "Play Album", "Shuffle", and scrollable track list with track numbers.
+  - `PixelAddToPlaylistSheet`: quick add-to-collection bottom sheet.
+  - Integrated into `MainScreen` with "+ Create" quick button, horizontal album carousels, and multi-category browsing.
+- **Verification**: Deployed to Motorola Edge 50 Pro; verified interactive preview in `preview.html`.
+
+---
+
 ## 3. Change Tracking Guidelines for New Features
 
 When adding or modifying features in the future, append an entry following this format:
