@@ -24,6 +24,7 @@ This document provides a record of all features, architectural milestones, UI/UX
 | **FEAT-027** | App Performance Acceleration & 100% Lossless Streaming | Performance & Engine | `COMPLETE` | Motorola Edge 50 Pro | 2026-09-28 |
 | **FEAT-028** | Complete Component Functionality & Hardware Integration | Feature Completion & Hardware | `COMPLETE` | Motorola Edge 50 Pro | 2026-09-28 |
 | **FEAT-029** | Auto Audio Streaming Quality Switching on Signal Fluctuation | Audio Engine & Network ABR | `COMPLETE` | Motorola Edge 50 Pro | 2026-09-28 |
+| **FEAT-030** | Dual-Mode Audio Equalizer (AI-Assisted & Manual Graphic) | Audio DSP & UI | `COMPLETE` | Motorola Edge 50 Pro | 2026-09-28 |
 
 ---
 
@@ -630,6 +631,57 @@ This document provides a record of all features, architectural milestones, UI/UX
     - `aura_auto_monitor.png`: Settings monitor showing `98% Signal (58 Mbps)`, `24-Bit FLAC (Lossless)`, and strong signal status.
     - `aura_search_loaded.png`: Online search for Hans Zimmer returning Spotify & YouTube Music albums and tracks.
     - `aura_expanded_now.png`: Expanded player playing *Time* with dynamic `[AUTO 24-BIT]` badge and animated wavy seekbar.
+
+---
+
+### [FEAT-030] Dual-Mode Audio Equalizer (AI-Assisted & Manual Graphic)
+- **Date**: 2026-09-28
+- **Category**: Audio DSP & UI / Hardware Effects
+- **Status**: COMPLETE
+- **Files Affected**:
+  - `app/src/main/java/com/example/auramusic/audio/EqualizerState.kt`
+  - `app/src/main/java/com/example/auramusic/audio/EqualizerManager.kt`
+  - `app/src/main/java/com/example/auramusic/ui/components/PixelEqualizerSheet.kt`
+  - `app/src/main/java/com/example/auramusic/player/PlayerState.kt`
+  - `app/src/main/java/com/example/auramusic/player/MusicPlayerManager.kt`
+  - `app/src/main/java/com/example/auramusic/ui/main/MainScreenViewModel.kt`
+  - `app/src/main/java/com/example/auramusic/ui/components/PixelExpandedPlayer.kt`
+  - `app/src/main/java/com/example/auramusic/ui/components/PixelAudioRouteSheet.kt`
+  - `app/src/main/java/com/example/auramusic/ui/main/MainScreen.kt`
+  - `app/src/main/AndroidManifest.xml`
+  - `app/src/test/java/com/example/auramusic/audio/EqualizerEngineTest.kt`
+- **Description**:
+  Implemented an audiophile-grade dual-mode Equalizer and spatial audio processing system designed strictly to Google Pixel Material 3 Expressive Monochrome standards:
+  1. **Dual Equalizer Operational Modes**:
+     - **AI-Assisted Equalizer Mode**:
+       - On-device heuristic psychoacoustic engine (`AiEqualizerEngine`) evaluating track metadata, genre, timbre, bitrate tier, lossless status, and sudden network bitrate dips.
+       - Generates bespoke 5-band gain curves and human-readable acoustic rationale explaining the spectral adjustments.
+       - User-selectable acoustic target styles: `Auto-Detect (AI Heuristic)`, `Cinematic Soundstage`, `Vocal Presence`, `Sub-Bass Punch`, `Warm Analog Tape`, and `Studio Reference Pure (Flat)`.
+       - High-frequency roll-off protection when network fluctuations force lower bitrates to tame compression artifacts.
+     - **Manual Graphic Equalizer Mode**:
+       - Direct 5-band graphic slider control with adjustable gain (-12dB to +12dB).
+       - Tactile vertical squircle sliders with center detent indicators, dB readout chips, and haptic ticks on value changes.
+       - Curated acoustic presets: `Flat`, `Bass Heavy`, `Vocal Lift`, `Rock`, `Pop`, `Electronic`, `Classical`, `Hip-Hop`, `Acoustic`, and `Custom`.
+  2. **Interactive Bézier Spline Response Curve Canvas**:
+     - Custom Compose `Canvas` calculating cubic Bézier splines across all 5 frequency band control points (`(p0 + p1) / 2`).
+     - Animated multi-point response line with dual-tone OLED gradient fill (`#FFFFFF` to `#00000000`), dashed 0dB reference baseline, and center frequency labels (60Hz, 230Hz, 910Hz, 3.6kHz, 14kHz).
+  3. **Hardware DSP Pipeline & Android System Integration**:
+     - Attached Android hardware `android.media.audiofx.Equalizer`, `BassBoost`, and `Virtualizer` directly to ExoPlayer's `audioSessionId`.
+     - Added master bypass toggle permitting instant A/B comparison between active DSP coloration and bit-perfect source output.
+     - Added direct launcher shortcut into Motorola's native **Dolby Atmos** audio panel (`AudioEffect.ACTION_DISPLAY_AUDIO_EFFECT_CONTROL_PANEL`).
+     - Real-time persistence of all settings, gains, bass boost, virtualizer, and target styles in `SharedPreferences` (`aura_equalizer_settings`).
+  4. **Pixel M3 Expressive Monochrome UI Integration**:
+     - Added dedicated `Audio Equalizer & Spatial FX` settings card in Settings tab with live status badge (`✦ AI ACTIVE` / `✦ GRAPHIC`).
+     - Integrated top bar Equalizer button and interactive profile badge in `PixelExpandedPlayer.kt`.
+     - Wired Equalizer button in `PixelAudioRouteSheet.kt` to directly launch `PixelEqualizerSheet.kt`.
+- **Verification**:
+  - Unit tests: `EqualizerEngineTest.kt` passed 100% (`hansZimmer_triggersCinematicCurve`, `daftPunk_triggersEdmCurve`, `adele_triggersVocalLiftCurve`, `explicitTarget_overridesHeuristics`, `studioReferenceTarget_flattensAllBands`, `abrDip_appliesHighFrequencyRollOff`).
+  - Debug APK built and installed on Motorola Edge 50 Pro (`ZD222MKB8C`).
+  - Screen captures verified on device:
+    - `aura_equalizer_live.png`: Settings tab showing `Audio Equalizer & Spatial FX` card with `✦ AI ACTIVE` badge.
+    - `aura_equalizer_opened.png`: `PixelEqualizerSheet` in AI-Assisted mode showing Bézier spline, rationale card, and target chips.
+    - `aura_equalizer_manual.png`: `PixelEqualizerSheet` in Manual Graphic mode with 5 vertical squircle sliders (-12dB to +12dB), curve, bass boost & virtualizer.
+    - `aura_equalizer_flat.png`: Preset switching verified live on Motorola display.
 
 ---
 
