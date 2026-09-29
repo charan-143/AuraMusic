@@ -10,6 +10,7 @@ import android.net.Uri
 import android.os.Build
 import android.os.Handler
 import android.os.Looper
+import android.util.Log
 import androidx.media3.common.MediaItem
 import androidx.media3.common.MediaMetadata
 import androidx.media3.common.Player
@@ -63,7 +64,10 @@ class MusicPlayerManager(private val context: Context) {
     val favoritesManager by lazy { com.example.auramusic.data.FavoritesManager.getInstance(context) }
 
     val exoPlayer: ExoPlayer by lazy {
-        val mediaSourceFactory = DefaultMediaSourceFactory(cacheManager.cacheDataSourceFactory)
+        val extractorsFactory = androidx.media3.extractor.DefaultExtractorsFactory().apply {
+            setConstantBitrateSeekingEnabled(true)
+        }
+        val mediaSourceFactory = DefaultMediaSourceFactory(cacheManager.cacheDataSourceFactory, extractorsFactory)
         val loadControl = cacheManager.createTravelLoadControl()
 
         ExoPlayer.Builder(context)
@@ -72,6 +76,9 @@ class MusicPlayerManager(private val context: Context) {
             .build()
             .apply {
                 addListener(object : Player.Listener {
+                    override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+                        Log.e("MusicPlayerManager", "ExoPlayer playback error: ${error.message}", error)
+                    }
                     override fun onAudioSessionIdChanged(audioSessionId: Int) {
                         if (audioSessionId > 0) {
                             equalizerManager.attachToSession(audioSessionId)
@@ -275,13 +282,26 @@ class MusicPlayerManager(private val context: Context) {
             equalizerManager.attachToSession(exoPlayer.audioSessionId)
         }
 
-        val localPath = offlineDownloadManager.getLocalPath(track.id) ?: track.localFilePath
-        val localFile = if (!localPath.isNullOrBlank()) java.io.File(localPath) else null
-        val effectiveUri = if (localFile != null && localFile.exists()) {
-            Uri.fromFile(localFile)
-        } else if (track.audioUrl.isNotBlank()) {
-            Uri.parse(track.audioUrl)
-        } else null
+        val downloadedPath = offlineDownloadManager.getLocalPath(track.id)
+        val effectiveUri: Uri? = when {
+            // 1. Downloaded track stored in app private / external files
+            !downloadedPath.isNullOrBlank() && java.io.File(downloadedPath).exists() && java.io.File(downloadedPath).length() > 0L -> {
+                Uri.fromFile(java.io.File(downloadedPath))
+            }
+            // 2. Android MediaStore content resolver URI (physical device audio)
+            track.audioUrl.startsWith("content://") -> {
+                Uri.parse(track.audioUrl)
+            }
+            // 3. Local file path if accessible and non-empty
+            !track.localFilePath.isNullOrBlank() && java.io.File(track.localFilePath).exists() && java.io.File(track.localFilePath).length() > 0L -> {
+                Uri.fromFile(java.io.File(track.localFilePath))
+            }
+            // 4. Online stream or general URI
+            track.audioUrl.isNotBlank() -> {
+                Uri.parse(track.audioUrl)
+            }
+            else -> null
+        }
 
         if (effectiveUri != null) {
             try {

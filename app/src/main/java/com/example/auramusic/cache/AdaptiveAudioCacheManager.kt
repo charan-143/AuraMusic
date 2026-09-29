@@ -74,10 +74,14 @@ class AdaptiveAudioCacheManager(private val context: Context) {
         )
     }
 
+    val defaultDataSourceFactory: DataSource.Factory by lazy {
+        androidx.media3.datasource.DefaultDataSource.Factory(context.applicationContext, httpDataSourceFactory)
+    }
+
     val cacheDataSourceFactory: DataSource.Factory by lazy {
         CacheDataSource.Factory()
             .setCache(simpleCache)
-            .setUpstreamDataSourceFactory(httpDataSourceFactory)
+            .setUpstreamDataSourceFactory(defaultDataSourceFactory)
             .setFlags(CacheDataSource.FLAG_IGNORE_CACHE_ON_ERROR)
     }
 
