@@ -27,6 +27,8 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.DownloadDone
 import androidx.compose.material.icons.filled.Favorite
 import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.GraphicEq
@@ -102,6 +104,10 @@ fun PixelExpandedPlayer(
     isLyricsActive: Boolean = false,
     onToggleLyrics: () -> Unit = {},
     onSeekToTimestamp: (Long) -> Unit = {},
+    isDownloaded: Boolean = false,
+    downloadProgress: Float? = null,
+    onDownloadClick: () -> Unit = {},
+    onOpenSpeedSheet: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val haptic = LocalHapticFeedback.current
@@ -388,20 +394,46 @@ fun PixelExpandedPlayer(
                 }
             }
 
-            Spacer(modifier = Modifier.width(12.dp))
+            Spacer(modifier = Modifier.width(8.dp))
 
+            // Download Action Button
+            IconButton(
+                onClick = {
+                    haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                    onDownloadClick()
+                },
+                modifier = Modifier.size(42.dp)
+            ) {
+                if (downloadProgress != null) {
+                    androidx.compose.material3.CircularProgressIndicator(
+                        progress = { downloadProgress },
+                        strokeWidth = 2.dp,
+                        color = MonochromeWhite,
+                        modifier = Modifier.size(20.dp)
+                    )
+                } else {
+                    Icon(
+                        imageVector = if (isDownloaded) Icons.Default.DownloadDone else Icons.Default.Download,
+                        contentDescription = if (isDownloaded) "Downloaded" else "Download Track",
+                        tint = if (isDownloaded) MonochromeWhite else MonochromeSilver,
+                        modifier = Modifier.size(22.dp)
+                    )
+                }
+            }
+
+            // Favorite Button
             IconButton(
                 onClick = {
                     haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
                     onToggleFavorite()
                 },
-                modifier = Modifier.size(44.dp)
+                modifier = Modifier.size(42.dp)
             ) {
                 Icon(
                     imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
                     contentDescription = "Favorite",
                     tint = if (isFavorite) MonochromeWhite else MonochromeSilver,
-                    modifier = Modifier.size(26.dp)
+                    modifier = Modifier.size(24.dp)
                 )
             }
         }
@@ -529,13 +561,8 @@ fun PixelExpandedPlayer(
                     .background(MonochromeSurfaceContainer)
                     .border(1.dp, MonochromeOutlineVariant, RoundedCornerShape(percent = 50))
                     .clickable {
-                        val nextSpeed = when (playerState.playbackSpeed) {
-                            1.0f -> 1.5f
-                            1.5f -> 2.0f
-                            else -> 1.0f
-                        }
-                        onSpeedChange(nextSpeed)
                         haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                        onOpenSpeedSheet()
                     }
                     .padding(horizontal = 12.dp, vertical = 6.dp)
             ) {

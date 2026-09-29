@@ -21,6 +21,9 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.DownloadDone
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -46,6 +49,9 @@ fun PixelTrackTile(
     isPlaying: Boolean,
     onClick: () -> Unit,
     onMoreClick: () -> Unit = {},
+    isFavorite: Boolean = false,
+    isDownloaded: Boolean = false,
+    onToggleFavorite: (() -> Unit)? = null,
     modifier: Modifier = Modifier
 ) {
     val haptic = LocalHapticFeedback.current
@@ -143,20 +149,45 @@ fun PixelTrackTile(
                     fontSize = 11.sp,
                     color = colors.textTertiary
                 )
+                if (isDownloaded) {
+                    Spacer(modifier = Modifier.width(6.dp))
+                    Icon(
+                        imageVector = Icons.Default.DownloadDone,
+                        contentDescription = "Downloaded",
+                        tint = colors.textSecondary,
+                        modifier = Modifier.size(12.dp)
+                    )
+                }
             }
         }
 
-        // Right: More Options
-        IconButton(
-            onClick = onMoreClick,
-            modifier = Modifier.size(36.dp)
-        ) {
-            Icon(
-                imageVector = Icons.Default.MoreVert,
-                contentDescription = "Track options",
-                tint = colors.textSecondary,
-                modifier = Modifier.size(18.dp)
-            )
+        // Right Actions: Favorite Toggle & More Options
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            if (onToggleFavorite != null) {
+                IconButton(
+                    onClick = onToggleFavorite,
+                    modifier = Modifier.size(34.dp)
+                ) {
+                    Icon(
+                        imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
+                        contentDescription = "Favorite",
+                        tint = if (isFavorite) colors.textPrimary else colors.textTertiary,
+                        modifier = Modifier.size(16.dp)
+                    )
+                }
+            }
+
+            IconButton(
+                onClick = onMoreClick,
+                modifier = Modifier.size(34.dp)
+            ) {
+                Icon(
+                    imageVector = Icons.Default.MoreVert,
+                    contentDescription = "Track options",
+                    tint = colors.textSecondary,
+                    modifier = Modifier.size(18.dp)
+                )
+            }
         }
     }
 }
