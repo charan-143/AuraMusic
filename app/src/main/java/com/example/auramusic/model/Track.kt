@@ -28,6 +28,8 @@ data class Track(
     val isLossless: Boolean = true,
     val isCachedOffline: Boolean = false,
     val isLocal: Boolean = false,
+    val localFilePath: String? = null,
+    val isFavorite: Boolean = false,
     val category: String = "Lossless", // "Spotify", "YouTube Music", "Lossless", "Lofi Chill", "Device Library"
     val waveformData: List<Float> = listOf(
         0.3f, 0.5f, 0.8f, 0.4f, 0.9f, 0.7f, 0.4f, 0.6f, 0.9f, 0.5f,
