@@ -150,9 +150,24 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
 
     // Offline Downloads
     val downloadStates = playerManager.offlineDownloadManager.downloadStates
-    fun downloadTrack(track: Track) { playerManager.offlineDownloadManager.downloadTrack(track) }
+    fun downloadTrack(track: Track) {
+        audioRepository.addTracks(listOf(track))
+        _allTracks.value = audioRepository.getMultiSourceTracks()
+        playerManager.offlineDownloadManager.downloadTrack(track)
+    }
     fun deleteDownloadedTrack(trackId: String) { playerManager.offlineDownloadManager.deleteDownload(trackId) }
     fun isTrackDownloaded(trackId: String): Boolean = playerManager.offlineDownloadManager.isDownloaded(trackId)
+
+    fun loadDeviceTracks() {
+        viewModelScope.launch(Dispatchers.IO) {
+            try {
+                val tracks = audioRepository.loadDeviceAudio()
+                if (tracks.isNotEmpty()) {
+                    _allTracks.value = audioRepository.getMultiSourceTracks()
+                }
+            } catch (ignored: Exception) {}
+        }
+    }
 
     // Library Filters & Smart Auto-Playlists
     private val _libraryFilter = MutableStateFlow("All")
@@ -164,24 +179,29 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     val recentlyPlayedIds: StateFlow<List<String>> = playerManager.favoritesManager.recentlyPlayedIds
 
     val favoriteTracks: StateFlow<List<Track>> by lazy {
-        combine(_allTracks, favoriteTrackIds) { tracks, favIds ->
-            tracks.filter { it.id in favIds }
+        combine(_allTracks, favoriteTrackIds, playlistRepository.playlists) { tracks, favIds, plists ->
+            val favPlaylistTracks = plists.firstOrNull { it.id == "pl_default_fav" }?.tracks ?: emptyList()
+            val fromAll = tracks.filter { it.id in favIds }
+            (fromAll + favPlaylistTracks).distinctBy { it.id }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     }
 
     val downloadedTracks: StateFlow<List<Track>> by lazy {
-        combine(_allTracks, downloadStates) { tracks, states ->
-            tracks.filter {
-                it.isLocal ||
-                playerManager.offlineDownloadManager.isDownloaded(it.id) ||
-                states[it.id] is com.example.auramusic.cache.DownloadState.Downloaded
-            }
+        combine(
+            playerManager.offlineDownloadManager.downloadedTracks,
+            _allTracks,
+            downloadStates
+        ) { offlineTracks, allTracks, states ->
+            val localTracks = allTracks.filter { it.isLocal }
+            val statesDownloaded = allTracks.filter { states[it.id] is com.example.auramusic.cache.DownloadState.Downloaded }
+            (offlineTracks + localTracks + statesDownloaded).distinctBy { it.id }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     }
 
     val mostPlayedTracks: StateFlow<List<Track>> by lazy {
         combine(_allTracks, mostPlayedCounts) { tracks, counts ->
-            tracks.filter { (counts[it.id] ?: 0) > 0 }.sortedByDescending { counts[it.id] ?: 0 }
+            val withPlays = tracks.filter { (counts[it.id] ?: 0) > 0 }.sortedByDescending { counts[it.id] ?: 0 }
+            if (withPlays.isNotEmpty()) withPlays else tracks.take(12)
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
     }
 
@@ -194,7 +214,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                 } else {
                     "Device Audio"
                 }
-            }
+            }.filter { it.value.isNotEmpty() }
         }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
     }
 
@@ -311,6 +331,9 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         // Fetch dynamic trending music from online catalog
         loadTrendingMusic()
 
+        // Load physical audio files from device storage (Download, Music, etc.)
+        loadDeviceTracks()
+
         // Initialize Audio Streaming Quality mode
         val initialQuality = _streamingQuality.value
         val isAuto = initialQuality.startsWith("Auto")
@@ -394,18 +417,6 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         }
     }
 
-    private fun loadDeviceTracks() {
-        viewModelScope.launch {
-            val deviceAudio = audioRepository.loadDeviceAudio()
-            if (deviceAudio.isNotEmpty()) {
-                val updated = (audioRepository.getMultiSourceTracks() + deviceAudio).distinctBy { it.id }
-                _allTracks.value = updated
-                playerManager.setQueue(updated, 0)
-                refreshRecommendations(playerState.value.currentTrack)
-            }
-        }
-    }
-
     fun rescanDeviceAudio() {
         loadDeviceTracks()
     }
@@ -474,6 +485,8 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
 
     // Playback and Selection
     fun playTrack(track: Track, newQueue: List<Track>? = null) {
+        audioRepository.addTracks(listOf(track))
+        _allTracks.value = audioRepository.getMultiSourceTracks()
         val currentQueue = newQueue ?: filteredTracks.value.ifEmpty { 
             val recTracks = _recommendations.value.flatMap { it.tracks }
             if (recTracks.isNotEmpty()) recTracks else listOf(track)
@@ -719,6 +732,8 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
 
     // Favorites
     fun toggleFavorite(track: Track): Boolean {
+        audioRepository.addTracks(listOf(track))
+        _allTracks.value = audioRepository.getMultiSourceTracks()
         playerManager.favoritesManager.toggleFavorite(track.id)
         return playlistRepository.toggleFavorite(track)
     }

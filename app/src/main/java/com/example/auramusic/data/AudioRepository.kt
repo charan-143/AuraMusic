@@ -96,7 +96,7 @@ class AudioRepository(private val context: Context) {
             MediaStore.Audio.Media.DATA
         )
 
-        val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
+        val selection = "${MediaStore.Audio.Media.DURATION} >= 15000"
         val sortOrder = "${MediaStore.Audio.Media.TITLE} ASC"
 
         try {

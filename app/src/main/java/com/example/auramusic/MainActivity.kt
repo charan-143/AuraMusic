@@ -40,10 +40,21 @@ class MainActivity : ComponentActivity() {
             setShowWhenLocked(true)
             setTurnScreenOn(true)
         }
+        val permsToRequest = mutableListOf<String>()
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
-            if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
-                requestPermissions(arrayOf(android.Manifest.permission.POST_NOTIFICATIONS), 1001)
+            if (checkSelfPermission(android.Manifest.permission.READ_MEDIA_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                permsToRequest.add(android.Manifest.permission.READ_MEDIA_AUDIO)
             }
+            if (checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                permsToRequest.add(android.Manifest.permission.POST_NOTIFICATIONS)
+            }
+        } else {
+            if (checkSelfPermission(android.Manifest.permission.READ_EXTERNAL_STORAGE) != android.content.pm.PackageManager.PERMISSION_GRANTED) {
+                permsToRequest.add(android.Manifest.permission.READ_EXTERNAL_STORAGE)
+            }
+        }
+        if (permsToRequest.isNotEmpty()) {
+            requestPermissions(permsToRequest.toTypedArray(), 1001)
         }
         setContent {
             AuraMusicTheme {
