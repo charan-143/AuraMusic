@@ -241,7 +241,11 @@ fun PixelLyricQuoteDialog(
                                     type = "text/plain"
                                     putExtra(Intent.EXTRA_TEXT, shareText)
                                 }
-                                context.startActivity(Intent.createChooser(intent, "Share Lyric Quote"))
+                                val chooser = Intent.createChooser(intent, "Share Lyric Quote")
+                                if (context !is android.app.Activity) {
+                                    chooser.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                                }
+                                context.startActivity(chooser)
                             }
                             .padding(vertical = 12.dp),
                         contentAlignment = Alignment.Center

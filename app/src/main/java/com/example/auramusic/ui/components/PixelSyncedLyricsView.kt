@@ -84,6 +84,7 @@ fun PixelSyncedLyricsView(
 
     val lines = lyrics?.lines ?: emptyList()
     var selectedQuoteText by remember { mutableStateOf<String?>(null) }
+    var isKaraokeMode by remember { mutableStateOf(false) }
 
     // Determine the current line by timestamp
     val rawIndex = remember(currentPositionMs, lines) {
@@ -202,6 +203,25 @@ fun PixelSyncedLyricsView(
                         modifier = Modifier.padding(end = 8.dp)
                     )
 
+                    // Karaoke Stage Mode Toggle
+                    IconButton(
+                        onClick = {
+                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                            isKaraokeMode = !isKaraokeMode
+                        },
+                        modifier = Modifier
+                            .size(34.dp)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(if (isKaraokeMode) MonochromeWhite else Color.Transparent)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.Mic,
+                            contentDescription = "Toggle Karaoke Stage Mode",
+                            tint = if (isKaraokeMode) MonochromeBlack else MonochromeWhite,
+                            modifier = Modifier.size(18.dp)
+                        )
+                    }
+
                     // Quick Quote Card button
                     IconButton(
                         onClick = {
@@ -314,46 +334,64 @@ fun PixelSyncedLyricsView(
 
                         val textColor = when {
                             isCurrent -> MonochromeWhite
-                            isPast -> MonochromeSilver.copy(alpha = 0.85f)
-                            else -> MonochromeMuted
+                            isPast -> if (isKaraokeMode) MonochromeSilver.copy(alpha = 0.4f) else MonochromeSilver.copy(alpha = 0.85f)
+                            else -> if (isKaraokeMode) MonochromeMuted.copy(alpha = 0.35f) else MonochromeMuted
                         }
 
-                        val fontSize = if (isCurrent) 20.sp else 16.sp
-                        val fontWeight = if (isCurrent) FontWeight.Bold else FontWeight.Medium
+                        val fontSize = if (isCurrent) (if (isKaraokeMode) 26.sp else 20.sp) else (if (isKaraokeMode) 15.sp else 16.sp)
+                        val fontWeight = if (isCurrent) (if (isKaraokeMode) FontWeight.ExtraBold else FontWeight.Bold) else FontWeight.Medium
+                        val lineHeight = if (isCurrent) (if (isKaraokeMode) 34.sp else 26.sp) else 22.sp
 
                         Row(
                             verticalAlignment = Alignment.CenterVertically,
                             modifier = Modifier
                                 .fillMaxWidth()
                                 .scale(scale)
-                                .clip(RoundedCornerShape(14.dp))
+                                .clip(RoundedCornerShape(16.dp))
                                 .background(
-                                    if (isCurrent) MonochromeSurfaceContainer.copy(alpha = 0.55f)
-                                    else Color.Transparent
+                                    if (isCurrent) {
+                                        if (isKaraokeMode) MonochromeWhite.copy(alpha = 0.12f)
+                                        else MonochromeSurfaceContainer.copy(alpha = 0.55f)
+                                    } else Color.Transparent
+                                )
+                                .then(
+                                    if (isCurrent && isKaraokeMode) {
+                                        Modifier.border(1.dp, MonochromeWhite.copy(alpha = 0.3f), RoundedCornerShape(16.dp))
+                                    } else Modifier
                                 )
                                 .pointerInput(line.timestampMs, line.text) {
                                     detectTapGestures(
                                         onTap = {
-                                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                                            onSeekToTimestamp(line.timestampMs)
+                                             haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                                             onSeekToTimestamp(line.timestampMs)
                                         },
                                         onLongPress = {
-                                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                                            selectedQuoteText = line.text
+                                             haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                             selectedQuoteText = line.text
                                         }
                                     )
                                 }
-                                .padding(horizontal = 12.dp, vertical = 8.dp)
+                                .padding(horizontal = 14.dp, vertical = if (isKaraokeMode && isCurrent) 12.dp else 8.dp)
                         ) {
                             if (isCurrent) {
-                                Box(
-                                    modifier = Modifier
-                                        .width(3.dp)
-                                        .height(18.dp)
-                                        .clip(RoundedCornerShape(2.dp))
-                                        .background(MonochromeWhite)
-                                )
-                                Spacer(modifier = Modifier.width(10.dp))
+                                if (isKaraokeMode) {
+                                    Icon(
+                                        imageVector = Icons.Default.Mic,
+                                        contentDescription = "Singing Now",
+                                        tint = MonochromeWhite,
+                                        modifier = Modifier.size(16.dp)
+                                    )
+                                    Spacer(modifier = Modifier.width(8.dp))
+                                } else {
+                                    Box(
+                                        modifier = Modifier
+                                            .width(3.dp)
+                                            .height(18.dp)
+                                            .clip(RoundedCornerShape(2.dp))
+                                            .background(MonochromeWhite)
+                                    )
+                                    Spacer(modifier = Modifier.width(10.dp))
+                                }
                             }
 
                             Column(modifier = Modifier.weight(1f)) {
@@ -362,7 +400,7 @@ fun PixelSyncedLyricsView(
                                     fontSize = fontSize,
                                     fontWeight = fontWeight,
                                     color = textColor,
-                                    lineHeight = 26.sp
+                                    lineHeight = lineHeight
                                 )
                             }
 
