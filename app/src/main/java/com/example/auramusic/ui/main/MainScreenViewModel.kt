@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -45,7 +46,12 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     val playbackProgress: StateFlow<PlaybackProgress> = playerManager.playbackProgress
     val networkStatus = networkObserver.networkStatus
     val playlists: StateFlow<List<Playlist>> = playlistRepository.playlists
-    val favoriteTrackIds: StateFlow<Set<String>> = playlistRepository.favoriteTrackIds
+    val favoriteTrackIds: StateFlow<Set<String>> = combine(
+        playlistRepository.favoriteTrackIds,
+        playerManager.favoritesManager.favoriteIds
+    ) { rIds: Set<String>, mIds: Set<String> ->
+        rIds + mIds
+    }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptySet())
 
     // Theme Mode: Light Mode vs Dark Mode (Defaults to OLED Dark)
     private val _isDarkMode = MutableStateFlow(prefs.getBoolean("pref_is_dark_mode", true))
@@ -134,6 +140,63 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
 
     private val _isSleepTimerDialogVisible = MutableStateFlow(false)
     val isSleepTimerDialogVisible: StateFlow<Boolean> = _isSleepTimerDialogVisible.asStateFlow()
+
+    private val _isPlaybackSpeedSheetVisible = MutableStateFlow(false)
+    val isPlaybackSpeedSheetVisible: StateFlow<Boolean> = _isPlaybackSpeedSheetVisible.asStateFlow()
+
+    fun openPlaybackSpeedSheet() { _isPlaybackSpeedSheetVisible.value = true }
+    fun closePlaybackSpeedSheet() { _isPlaybackSpeedSheetVisible.value = false }
+    fun setCrossfade(enabled: Boolean, durationSec: Int = 3) { playerManager.setCrossfade(enabled, durationSec) }
+
+    // Offline Downloads
+    val downloadStates = playerManager.offlineDownloadManager.downloadStates
+    fun downloadTrack(track: Track) { playerManager.offlineDownloadManager.downloadTrack(track) }
+    fun deleteDownloadedTrack(trackId: String) { playerManager.offlineDownloadManager.deleteDownload(trackId) }
+    fun isTrackDownloaded(trackId: String): Boolean = playerManager.offlineDownloadManager.isDownloaded(trackId)
+
+    // Library Filters & Smart Auto-Playlists
+    private val _libraryFilter = MutableStateFlow("All")
+    val libraryFilter: StateFlow<String> = _libraryFilter.asStateFlow()
+    val libraryFilters = listOf("All", "Favorites", "Downloaded", "Most Played", "Folders")
+    fun setLibraryFilter(filter: String) { _libraryFilter.value = filter }
+
+    val mostPlayedCounts: StateFlow<Map<String, Int>> = playerManager.favoritesManager.playCountsFlow
+    val recentlyPlayedIds: StateFlow<List<String>> = playerManager.favoritesManager.recentlyPlayedIds
+
+    val favoriteTracks: StateFlow<List<Track>> by lazy {
+        combine(_allTracks, favoriteTrackIds) { tracks, favIds ->
+            tracks.filter { it.id in favIds }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }
+
+    val downloadedTracks: StateFlow<List<Track>> by lazy {
+        combine(_allTracks, downloadStates) { tracks, states ->
+            tracks.filter {
+                it.isLocal ||
+                playerManager.offlineDownloadManager.isDownloaded(it.id) ||
+                states[it.id] is com.example.auramusic.cache.DownloadState.Downloaded
+            }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }
+
+    val mostPlayedTracks: StateFlow<List<Track>> by lazy {
+        combine(_allTracks, mostPlayedCounts) { tracks, counts ->
+            tracks.filter { (counts[it.id] ?: 0) > 0 }.sortedByDescending { counts[it.id] ?: 0 }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyList())
+    }
+
+    val folderTracks: StateFlow<Map<String, List<Track>>> by lazy {
+        _allTracks.map { tracks ->
+            tracks.filter { it.isLocal }.groupBy {
+                val path = it.localFilePath
+                if (!path.isNullOrBlank()) {
+                    java.io.File(path).parentFile?.name ?: "Device Storage"
+                } else {
+                    "Device Audio"
+                }
+            }
+        }.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5000), emptyMap())
+    }
 
     val categories = listOf(
         "All Tracks",
@@ -410,8 +473,8 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     // Playback and Selection
-    fun playTrack(track: Track) {
-        val currentQueue = filteredTracks.value.ifEmpty { 
+    fun playTrack(track: Track, newQueue: List<Track>? = null) {
+        val currentQueue = newQueue ?: filteredTracks.value.ifEmpty { 
             val recTracks = _recommendations.value.flatMap { it.tracks }
             if (recTracks.isNotEmpty()) recTracks else listOf(track)
         }
@@ -655,9 +718,13 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     // Favorites
-    fun toggleFavorite(track: Track): Boolean = playlistRepository.toggleFavorite(track)
+    fun toggleFavorite(track: Track): Boolean {
+        playerManager.favoritesManager.toggleFavorite(track.id)
+        return playlistRepository.toggleFavorite(track)
+    }
 
-    fun isFavorite(trackId: String): Boolean = playlistRepository.isFavorite(trackId)
+    fun isFavorite(trackId: String): Boolean =
+        playerManager.favoritesManager.isFavorite(trackId) || playlistRepository.isFavorite(trackId)
 
     // Playlist deletion
     fun deletePlaylist(playlistId: String) = playlistRepository.deletePlaylist(playlistId)

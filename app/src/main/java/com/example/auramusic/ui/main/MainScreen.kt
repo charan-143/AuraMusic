@@ -56,6 +56,13 @@ import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.Radio
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.BarChart
+import androidx.compose.material.icons.filled.Download
+import androidx.compose.material.icons.filled.DownloadDone
+import androidx.compose.material.icons.filled.Favorite
+import androidx.compose.material.icons.filled.FavoriteBorder
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Shuffle
 import androidx.compose.material.icons.filled.Speaker
 import androidx.compose.material.icons.filled.TravelExplore
 import androidx.compose.material.icons.filled.Tune
@@ -95,6 +102,7 @@ import com.example.auramusic.ui.components.PixelEqualizerSheet
 import com.example.auramusic.ui.components.PixelExpandedPlayer
 import com.example.auramusic.ui.components.PixelMiniPlayer
 import com.example.auramusic.ui.components.PixelNavTab
+import com.example.auramusic.ui.components.PixelPlaybackSpeedSheet
 import com.example.auramusic.ui.components.PixelQueueSheet
 import com.example.auramusic.ui.components.PixelSleepTimerDialog
 import com.example.auramusic.ui.components.PixelSquircleAlbumArt
@@ -141,12 +149,22 @@ fun MainScreen(
         val selectedCategory by viewModel.selectedCategory.collectAsState()
         val currentTrackLyrics by viewModel.currentTrackLyrics.collectAsState()
         val isLyricsViewActive by viewModel.isLyricsViewActive.collectAsState()
+        val isPlaybackSpeedSheetVisible by viewModel.isPlaybackSpeedSheetVisible.collectAsState()
+        val downloadStates by viewModel.downloadStates.collectAsState()
+        val libraryFilter by viewModel.libraryFilter.collectAsState()
+        val favoriteTracks by viewModel.favoriteTracks.collectAsState()
+        val downloadedTracks by viewModel.downloadedTracks.collectAsState()
+        val mostPlayedTracks by viewModel.mostPlayedTracks.collectAsState()
+        val folderTracks by viewModel.folderTracks.collectAsState()
 
         // System Back Navigation Handling across all sheets, dialogs, player, and tabs
-        BackHandler(enabled = isCreatePlaylistDialogVisible) {
+        BackHandler(enabled = isPlaybackSpeedSheetVisible) {
+            viewModel.closePlaybackSpeedSheet()
+        }
+        BackHandler(enabled = !isPlaybackSpeedSheetVisible && isCreatePlaylistDialogVisible) {
             viewModel.closeCreatePlaylistDialog()
         }
-        BackHandler(enabled = !isCreatePlaylistDialogVisible && isAddToPlaylistSheetVisible) {
+        BackHandler(enabled = !isPlaybackSpeedSheetVisible && !isCreatePlaylistDialogVisible && isAddToPlaylistSheetVisible) {
             viewModel.closeAddToPlaylistSheet()
         }
         BackHandler(enabled = !isCreatePlaylistDialogVisible && !isAddToPlaylistSheetVisible && isSleepTimerDialogVisible) {
@@ -815,175 +833,544 @@ fun MainScreen(
                     }
 
                     // ==========================================
-                    // 3. LIBRARY TAB (Custom Playlists & Albums)
+                    // 3. LIBRARY TAB (Smart Playlists, Offline & Folders)
                     // ==========================================
                     PixelNavTab.LIBRARY -> {
                         item {
-                            Row(
-                                verticalAlignment = Alignment.CenterVertically,
-                                horizontalArrangement = Arrangement.SpaceBetween,
-                                modifier = Modifier.fillMaxWidth()
-                            ) {
-                                Column {
-                                    Text(
-                                        text = "Your Music Library",
-                                        fontSize = 20.sp,
-                                        fontWeight = FontWeight.Bold,
-                                        color = colors.textPrimary
-                                    )
-                                    Text(
-                                        text = "${playlists.size} playlists & albums created",
-                                        fontSize = 12.sp,
-                                        color = colors.textSecondary
-                                    )
+                            Column {
+                                Row(
+                                    verticalAlignment = Alignment.CenterVertically,
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    Column(modifier = Modifier.weight(1f)) {
+                                        Text(
+                                            text = "Your Music Library",
+                                            fontSize = 20.sp,
+                                            fontWeight = FontWeight.Bold,
+                                            color = colors.textPrimary
+                                        )
+                                        val subtitle = when (libraryFilter) {
+                                            "Favorites" -> "${favoriteTracks.size} liked songs"
+                                            "Downloaded" -> "${downloadedTracks.size} offline cached tracks"
+                                            "Most Played" -> "${mostPlayedTracks.size} frequently played tracks"
+                                            "Folders" -> "${folderTracks.size} device storage folders"
+                                            else -> "${playlists.size} playlists & custom albums"
+                                        }
+                                        Text(
+                                            text = subtitle,
+                                            fontSize = 12.sp,
+                                            color = colors.textSecondary
+                                        )
+                                    }
+
+                                    if (libraryFilter == "All") {
+                                        Box(
+                                            contentAlignment = Alignment.Center,
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(18.dp))
+                                                .background(colors.activePillBackground)
+                                                .clickable { viewModel.openCreatePlaylistDialog() }
+                                                .padding(horizontal = 14.dp, vertical = 8.dp)
+                                        ) {
+                                            Row(verticalAlignment = Alignment.CenterVertically) {
+                                                Icon(
+                                                    imageVector = Icons.Default.Add,
+                                                    contentDescription = "New",
+                                                    tint = colors.activePillText,
+                                                    modifier = Modifier.size(16.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(4.dp))
+                                                Text(
+                                                    text = "New",
+                                                    fontSize = 12.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = colors.activePillText
+                                                )
+                                            }
+                                        }
+                                    }
                                 }
 
-                                Box(
-                                    contentAlignment = Alignment.Center,
-                                    modifier = Modifier
-                                        .clip(RoundedCornerShape(18.dp))
-                                        .background(colors.activePillBackground)
-                                        .clickable { viewModel.openCreatePlaylistDialog() }
-                                        .padding(horizontal = 14.dp, vertical = 8.dp)
+                                Spacer(modifier = Modifier.height(12.dp))
+
+                                // Filter chips: All, Favorites, Downloaded, Most Played, Folders
+                                LazyRow(
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    modifier = Modifier.fillMaxWidth()
                                 ) {
-                                    Row(verticalAlignment = Alignment.CenterVertically) {
-                                        Icon(
-                                            imageVector = Icons.Default.Add,
-                                            contentDescription = "New",
-                                            tint = colors.activePillText,
-                                            modifier = Modifier.size(16.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(4.dp))
-                                        Text(
-                                            text = "New",
-                                            fontSize = 12.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = colors.activePillText
-                                        )
+                                    items(listOf("All", "Favorites", "Downloaded", "Most Played", "Folders")) { filter ->
+                                        val isSelected = libraryFilter == filter
+                                        Box(
+                                            modifier = Modifier
+                                                .clip(RoundedCornerShape(percent = 50))
+                                                .background(if (isSelected) colors.activePillBackground else colors.surfaceContainer)
+                                                .border(1.dp, if (isSelected) colors.activePillBackground else colors.outlineVariant, RoundedCornerShape(percent = 50))
+                                                .clickable {
+                                                    haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                                                    viewModel.setLibraryFilter(filter)
+                                                }
+                                                .padding(horizontal = 14.dp, vertical = 7.dp)
+                                        ) {
+                                            Text(
+                                                text = filter,
+                                                fontSize = 12.sp,
+                                                fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
+                                                color = if (isSelected) colors.activePillText else colors.textPrimary
+                                            )
+                                        }
                                     }
                                 }
                             }
                         }
 
-                        if (playlists.isEmpty()) {
-                            item {
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(24.dp))
-                                        .background(colors.cardBackground)
-                                        .border(1.dp, colors.outlineVariant, RoundedCornerShape(24.dp))
-                                        .padding(24.dp)
-                                ) {
-                                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                                        Text(
-                                            text = "No Playlists Yet",
-                                            fontSize = 16.sp,
-                                            fontWeight = FontWeight.Bold,
-                                            color = colors.textPrimary
+                        when (libraryFilter) {
+                            "Favorites" -> {
+                                if (favoriteTracks.isNotEmpty()) {
+                                    item {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .clip(RoundedCornerShape(14.dp))
+                                                    .background(colors.activePillBackground)
+                                                    .clickable {
+                                                        viewModel.playTrack(favoriteTracks.first(), favoriteTracks)
+                                                    }
+                                                    .padding(vertical = 10.dp),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Icon(imageVector = Icons.Default.PlayArrow, contentDescription = null, tint = colors.activePillText, modifier = Modifier.size(16.dp))
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                    Text("Play All (${favoriteTracks.size})", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = colors.activePillText)
+                                                }
+                                            }
+
+                                            Box(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .clip(RoundedCornerShape(14.dp))
+                                                    .background(colors.surfaceContainer)
+                                                    .border(1.dp, colors.outlineVariant, RoundedCornerShape(14.dp))
+                                                    .clickable {
+                                                        val shuffled = favoriteTracks.shuffled()
+                                                        viewModel.playTrack(shuffled.first(), shuffled)
+                                                    }
+                                                    .padding(vertical = 10.dp),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Icon(imageVector = Icons.Default.Shuffle, contentDescription = null, tint = colors.textPrimary, modifier = Modifier.size(16.dp))
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                    Text("Shuffle", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    items(favoriteTracks, key = { "fav_${it.id}" }) { track ->
+                                        PixelTrackTile(
+                                            track = track,
+                                            isSelected = playerState.currentTrack?.id == track.id,
+                                            isPlaying = playerState.isPlaying,
+                                            isFavorite = true,
+                                            isDownloaded = viewModel.isTrackDownloaded(track.id),
+                                            onToggleFavorite = { viewModel.toggleFavorite(track) },
+                                            onClick = { viewModel.playTrack(track, favoriteTracks) },
+                                            onMoreClick = { viewModel.openAddToPlaylist(track) }
                                         )
-                                        Spacer(modifier = Modifier.height(4.dp))
-                                        Text(
-                                            text = "Create your first custom playlist or album, or add songs from online search.",
-                                            fontSize = 12.sp,
-                                            color = colors.textSecondary,
-                                            textAlign = androidx.compose.ui.text.style.TextAlign.Center
-                                        )
+                                    }
+                                } else {
+                                    item {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(24.dp))
+                                                .background(colors.cardBackground)
+                                                .border(1.dp, colors.outlineVariant, RoundedCornerShape(24.dp))
+                                                .padding(28.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                                Icon(imageVector = Icons.Default.FavoriteBorder, contentDescription = null, tint = colors.textSecondary, modifier = Modifier.size(36.dp))
+                                                Spacer(modifier = Modifier.height(10.dp))
+                                                Text("No Liked Songs Yet", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                                                Spacer(modifier = Modifier.height(4.dp))
+                                                Text("Tap the heart icon on any track to save it here for fast 1-tap playback.", fontSize = 12.sp, color = colors.textSecondary, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                                            }
+                                        }
                                     }
                                 }
                             }
-                        } else {
-                            items(
-                                items = playlists,
-                                key = { it.id }
-                            ) { pl ->
-                                Box(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .clip(RoundedCornerShape(20.dp))
-                                        .background(colors.cardBackground)
-                                        .border(1.dp, colors.outlineVariant, RoundedCornerShape(20.dp))
-                                        .clickable { viewModel.openPlaylistAsAlbum(pl) }
-                                        .padding(12.dp)
-                                ) {
-                                    Row(
-                                        verticalAlignment = Alignment.CenterVertically,
-                                        modifier = Modifier.fillMaxWidth()
-                                    ) {
-                                        PixelSquircleAlbumArt(
-                                            coverArtUrl = pl.coverArtUrl,
-                                            isPlaying = false,
-                                            cornerRadius = 14.dp,
-                                            showVinylGrooves = false,
-                                            titleFallback = pl.name,
-                                            modifier = Modifier.size(52.dp)
-                                        )
-                                        Spacer(modifier = Modifier.width(12.dp))
-                                        Column(modifier = Modifier.weight(1f)) {
-                                            Row(verticalAlignment = Alignment.CenterVertically) {
-                                                Text(
-                                                    text = pl.name,
-                                                    fontSize = 15.sp,
-                                                    fontWeight = FontWeight.Bold,
-                                                    color = colors.textPrimary,
-                                                    maxLines = 1,
-                                                    overflow = TextOverflow.Ellipsis
-                                                )
-                                                Spacer(modifier = Modifier.width(6.dp))
-                                                Box(
-                                                    modifier = Modifier
-                                                        .clip(RoundedCornerShape(4.dp))
-                                                        .background(colors.surfaceContainer)
-                                                        .padding(horizontal = 4.dp, vertical = 1.dp)
-                                                ) {
-                                                    Text(
-                                                        text = if (pl.isCustomAlbum) "CUSTOM ALBUM" else "PLAYLIST",
-                                                        fontSize = 7.sp,
-                                                        fontWeight = FontWeight.Bold,
-                                                        color = colors.textPrimary
-                                                    )
+
+                            "Downloaded" -> {
+                                if (downloadedTracks.isNotEmpty()) {
+                                    item {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .clip(RoundedCornerShape(14.dp))
+                                                    .background(colors.activePillBackground)
+                                                    .clickable {
+                                                        viewModel.playTrack(downloadedTracks.first(), downloadedTracks)
+                                                    }
+                                                    .padding(vertical = 10.dp),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Icon(imageVector = Icons.Default.PlayArrow, contentDescription = null, tint = colors.activePillText, modifier = Modifier.size(16.dp))
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                    Text("Play Offline (${downloadedTracks.size})", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = colors.activePillText)
                                                 }
-                                            }
-                                            Text(
-                                                text = "${pl.trackCount} tracks • ${pl.formattedDuration}",
-                                                fontSize = 11.sp,
-                                                color = colors.textSecondary
-                                            )
-                                        }
-                                        Row(verticalAlignment = Alignment.CenterVertically) {
-                                            if (pl.id != "pl_default_fav") {
-                                                IconButton(
-                                                    onClick = {
-                                                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                                                        viewModel.deletePlaylist(pl.id)
-                                                        Toast.makeText(context, "Deleted ${pl.name}", Toast.LENGTH_SHORT).show()
-                                                    },
-                                                    modifier = Modifier.size(34.dp)
-                                                ) {
-                                                    Icon(
-                                                        imageVector = Icons.Default.Delete,
-                                                        contentDescription = "Delete",
-                                                        tint = colors.textTertiary,
-                                                        modifier = Modifier.size(18.dp)
-                                                    )
-                                                }
-                                                Spacer(modifier = Modifier.width(4.dp))
                                             }
 
-                                            IconButton(onClick = { viewModel.playPlaylist(pl) }) {
-                                                Box(
-                                                    contentAlignment = Alignment.Center,
-                                                    modifier = Modifier
-                                                        .size(34.dp)
-                                                        .clip(RoundedCornerShape(12.dp))
-                                                        .background(colors.activePillBackground)
+                                            Box(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .clip(RoundedCornerShape(14.dp))
+                                                    .background(colors.surfaceContainer)
+                                                    .border(1.dp, colors.outlineVariant, RoundedCornerShape(14.dp))
+                                                    .clickable {
+                                                        val shuffled = downloadedTracks.shuffled()
+                                                        viewModel.playTrack(shuffled.first(), shuffled)
+                                                    }
+                                                    .padding(vertical = 10.dp),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Icon(imageVector = Icons.Default.Shuffle, contentDescription = null, tint = colors.textPrimary, modifier = Modifier.size(16.dp))
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                    Text("Shuffle", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    items(downloadedTracks, key = { "dl_${it.id}" }) { track ->
+                                        PixelTrackTile(
+                                            track = track,
+                                            isSelected = playerState.currentTrack?.id == track.id,
+                                            isPlaying = playerState.isPlaying,
+                                            isFavorite = favoriteTrackIds.contains(track.id),
+                                            isDownloaded = true,
+                                            onToggleFavorite = { viewModel.toggleFavorite(track) },
+                                            onClick = { viewModel.playTrack(track, downloadedTracks) },
+                                            onMoreClick = { viewModel.openAddToPlaylist(track) }
+                                        )
+                                    }
+                                } else {
+                                    item {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(24.dp))
+                                                .background(colors.cardBackground)
+                                                .border(1.dp, colors.outlineVariant, RoundedCornerShape(24.dp))
+                                                .padding(28.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                                Icon(imageVector = Icons.Default.Download, contentDescription = null, tint = colors.textSecondary, modifier = Modifier.size(36.dp))
+                                                Spacer(modifier = Modifier.height(10.dp))
+                                                Text("No Offline Downloads", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                                                Spacer(modifier = Modifier.height(4.dp))
+                                                Text("Tap the download button on any track in the player to save it for 0ms offline playback without internet.", fontSize = 12.sp, color = colors.textSecondary, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            "Most Played" -> {
+                                if (mostPlayedTracks.isNotEmpty()) {
+                                    item {
+                                        Row(
+                                            modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
+                                            horizontalArrangement = Arrangement.spacedBy(10.dp)
+                                        ) {
+                                            Box(
+                                                modifier = Modifier
+                                                    .weight(1f)
+                                                    .clip(RoundedCornerShape(14.dp))
+                                                    .background(colors.activePillBackground)
+                                                    .clickable {
+                                                        viewModel.playTrack(mostPlayedTracks.first(), mostPlayedTracks)
+                                                    }
+                                                    .padding(vertical = 10.dp),
+                                                contentAlignment = Alignment.Center
+                                            ) {
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    Icon(imageVector = Icons.Default.PlayArrow, contentDescription = null, tint = colors.activePillText, modifier = Modifier.size(16.dp))
+                                                    Spacer(modifier = Modifier.width(6.dp))
+                                                    Text("Play Top Tracks (${mostPlayedTracks.size})", fontSize = 12.sp, fontWeight = FontWeight.Bold, color = colors.activePillText)
+                                                }
+                                            }
+                                        }
+                                    }
+
+                                    items(mostPlayedTracks, key = { "mp_${it.id}" }) { track ->
+                                        PixelTrackTile(
+                                            track = track,
+                                            isSelected = playerState.currentTrack?.id == track.id,
+                                            isPlaying = playerState.isPlaying,
+                                            isFavorite = favoriteTrackIds.contains(track.id),
+                                            isDownloaded = viewModel.isTrackDownloaded(track.id),
+                                            onToggleFavorite = { viewModel.toggleFavorite(track) },
+                                            onClick = { viewModel.playTrack(track, mostPlayedTracks) },
+                                            onMoreClick = { viewModel.openAddToPlaylist(track) }
+                                        )
+                                    }
+                                } else {
+                                    item {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(24.dp))
+                                                .background(colors.cardBackground)
+                                                .border(1.dp, colors.outlineVariant, RoundedCornerShape(24.dp))
+                                                .padding(28.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                                Icon(imageVector = Icons.Default.BarChart, contentDescription = null, tint = colors.textSecondary, modifier = Modifier.size(36.dp))
+                                                Spacer(modifier = Modifier.height(10.dp))
+                                                Text("No Play Count Data Yet", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                                                Spacer(modifier = Modifier.height(4.dp))
+                                                Text("Keep listening to songs! The engine records tracks played for more than 15 seconds into your personal charts.", fontSize = 12.sp, color = colors.textSecondary, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            "Folders" -> {
+                                if (folderTracks.isNotEmpty()) {
+                                    folderTracks.forEach { (folderName, tracksInFolder) ->
+                                        item(key = "folder_$folderName") {
+                                            Box(
+                                                modifier = Modifier
+                                                    .fillMaxWidth()
+                                                    .clip(RoundedCornerShape(20.dp))
+                                                    .background(colors.cardBackground)
+                                                    .border(1.dp, colors.outlineVariant, RoundedCornerShape(20.dp))
+                                                    .clickable {
+                                                        if (tracksInFolder.isNotEmpty()) {
+                                                            viewModel.playTrack(tracksInFolder.first(), tracksInFolder)
+                                                            Toast.makeText(context, "Playing folder: $folderName", Toast.LENGTH_SHORT).show()
+                                                        }
+                                                    }
+                                                    .padding(14.dp)
+                                            ) {
+                                                Row(
+                                                    verticalAlignment = Alignment.CenterVertically,
+                                                    modifier = Modifier.fillMaxWidth()
                                                 ) {
-                                                    Icon(
-                                                        imageVector = Icons.Default.PlayArrow,
-                                                        contentDescription = "Play",
-                                                        tint = colors.activePillText,
-                                                        modifier = Modifier.size(18.dp)
+                                                    Box(
+                                                        modifier = Modifier
+                                                            .size(46.dp)
+                                                            .clip(RoundedCornerShape(14.dp))
+                                                            .background(colors.surfaceContainer),
+                                                        contentAlignment = Alignment.Center
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = Icons.Default.Folder,
+                                                            contentDescription = null,
+                                                            tint = colors.textPrimary,
+                                                            modifier = Modifier.size(24.dp)
+                                                        )
+                                                    }
+
+                                                    Spacer(modifier = Modifier.width(14.dp))
+
+                                                    Column(modifier = Modifier.weight(1f)) {
+                                                        Text(
+                                                            text = folderName,
+                                                            fontSize = 15.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = colors.textPrimary,
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis
+                                                        )
+                                                        Spacer(modifier = Modifier.height(2.dp))
+                                                        Text(
+                                                            text = "${tracksInFolder.size} tracks • Device Storage",
+                                                            fontSize = 11.sp,
+                                                            color = colors.textSecondary
+                                                        )
+                                                    }
+
+                                                    Box(
+                                                        contentAlignment = Alignment.Center,
+                                                        modifier = Modifier
+                                                            .size(34.dp)
+                                                            .clip(RoundedCornerShape(12.dp))
+                                                            .background(colors.activePillBackground)
+                                                    ) {
+                                                        Icon(
+                                                            imageVector = Icons.Default.PlayArrow,
+                                                            contentDescription = "Play Folder",
+                                                            tint = colors.activePillText,
+                                                            modifier = Modifier.size(18.dp)
+                                                        )
+                                                    }
+                                                }
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    item {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(24.dp))
+                                                .background(colors.cardBackground)
+                                                .border(1.dp, colors.outlineVariant, RoundedCornerShape(24.dp))
+                                                .padding(28.dp),
+                                            contentAlignment = Alignment.Center
+                                        ) {
+                                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                                Icon(imageVector = Icons.Default.Folder, contentDescription = null, tint = colors.textSecondary, modifier = Modifier.size(36.dp))
+                                                Spacer(modifier = Modifier.height(10.dp))
+                                                Text("No Audio Folders Found", fontSize = 16.sp, fontWeight = FontWeight.Bold, color = colors.textPrimary)
+                                                Spacer(modifier = Modifier.height(4.dp))
+                                                Text("Audio files found in directories like /Music or /Download will appear grouped here.", fontSize = 12.sp, color = colors.textSecondary, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+
+                            else -> {
+                                // "All" mode: Custom Playlists & Albums
+                                if (playlists.isEmpty()) {
+                                    item {
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(24.dp))
+                                                .background(colors.cardBackground)
+                                                .border(1.dp, colors.outlineVariant, RoundedCornerShape(24.dp))
+                                                .padding(24.dp)
+                                        ) {
+                                            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                                Text(
+                                                    text = "No Playlists Yet",
+                                                    fontSize = 16.sp,
+                                                    fontWeight = FontWeight.Bold,
+                                                    color = colors.textPrimary
+                                                )
+                                                Spacer(modifier = Modifier.height(4.dp))
+                                                Text(
+                                                    text = "Create your first custom playlist or album, or add songs from online search.",
+                                                    fontSize = 12.sp,
+                                                    color = colors.textSecondary,
+                                                    textAlign = androidx.compose.ui.text.style.TextAlign.Center
+                                                )
+                                            }
+                                        }
+                                    }
+                                } else {
+                                    items(
+                                        items = playlists,
+                                        key = { it.id }
+                                    ) { pl ->
+                                        Box(
+                                            modifier = Modifier
+                                                .fillMaxWidth()
+                                                .clip(RoundedCornerShape(20.dp))
+                                                .background(colors.cardBackground)
+                                                .border(1.dp, colors.outlineVariant, RoundedCornerShape(20.dp))
+                                                .clickable { viewModel.openPlaylistAsAlbum(pl) }
+                                                .padding(12.dp)
+                                        ) {
+                                            Row(
+                                                verticalAlignment = Alignment.CenterVertically,
+                                                modifier = Modifier.fillMaxWidth()
+                                            ) {
+                                                PixelSquircleAlbumArt(
+                                                    coverArtUrl = pl.coverArtUrl,
+                                                    isPlaying = false,
+                                                    cornerRadius = 14.dp,
+                                                    showVinylGrooves = false,
+                                                    titleFallback = pl.name,
+                                                    modifier = Modifier.size(52.dp)
+                                                )
+                                                Spacer(modifier = Modifier.width(12.dp))
+                                                Column(modifier = Modifier.weight(1f)) {
+                                                    Row(verticalAlignment = Alignment.CenterVertically) {
+                                                        Text(
+                                                            text = pl.name,
+                                                            fontSize = 15.sp,
+                                                            fontWeight = FontWeight.Bold,
+                                                            color = colors.textPrimary,
+                                                            maxLines = 1,
+                                                            overflow = TextOverflow.Ellipsis
+                                                        )
+                                                        Spacer(modifier = Modifier.width(6.dp))
+                                                        Box(
+                                                            modifier = Modifier
+                                                                .clip(RoundedCornerShape(4.dp))
+                                                                .background(colors.surfaceContainer)
+                                                                .padding(horizontal = 4.dp, vertical = 1.dp)
+                                                        ) {
+                                                            Text(
+                                                                text = if (pl.isCustomAlbum) "CUSTOM ALBUM" else "PLAYLIST",
+                                                                fontSize = 7.sp,
+                                                                fontWeight = FontWeight.Bold,
+                                                                color = colors.textPrimary
+                                                            )
+                                                        }
+                                                    }
+                                                    Text(
+                                                        text = "${pl.trackCount} tracks • ${pl.formattedDuration}",
+                                                        fontSize = 11.sp,
+                                                        color = colors.textSecondary
                                                     )
+                                                }
+                                                Row(verticalAlignment = Alignment.CenterVertically) {
+                                                    if (pl.id != "pl_default_fav") {
+                                                        IconButton(
+                                                            onClick = {
+                                                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                                                viewModel.deletePlaylist(pl.id)
+                                                                Toast.makeText(context, "Deleted ${pl.name}", Toast.LENGTH_SHORT).show()
+                                                            },
+                                                            modifier = Modifier.size(34.dp)
+                                                        ) {
+                                                            Icon(
+                                                                imageVector = Icons.Default.Delete,
+                                                                contentDescription = "Delete",
+                                                                tint = colors.textTertiary,
+                                                                modifier = Modifier.size(18.dp)
+                                                            )
+                                                        }
+                                                        Spacer(modifier = Modifier.width(4.dp))
+                                                    }
+
+                                                    IconButton(onClick = { viewModel.playPlaylist(pl) }) {
+                                                        Box(
+                                                            contentAlignment = Alignment.Center,
+                                                            modifier = Modifier
+                                                                .size(34.dp)
+                                                                .clip(RoundedCornerShape(12.dp))
+                                                                .background(colors.activePillBackground)
+                                                        ) {
+                                                            Icon(
+                                                                imageVector = Icons.Default.PlayArrow,
+                                                                contentDescription = "Play",
+                                                                tint = colors.activePillText,
+                                                                modifier = Modifier.size(18.dp)
+                                                            )
+                                                        }
+                                                    }
                                                 }
                                             }
                                         }
@@ -1787,7 +2174,24 @@ fun MainScreen(
                     lyrics = currentTrackLyrics,
                     isLyricsActive = isLyricsViewActive,
                     onToggleLyrics = { viewModel.toggleLyricsView() },
-                    onSeekToTimestamp = { viewModel.seekToPosition(it) }
+                    onSeekToTimestamp = { viewModel.seekToPosition(it) },
+                    isDownloaded = playerState.currentTrack?.let { viewModel.isTrackDownloaded(it.id) } ?: false,
+                    downloadProgress = playerState.currentTrack?.let { t ->
+                        val dState = downloadStates[t.id]
+                        if (dState is com.example.auramusic.cache.DownloadState.Downloading) dState.progress else null
+                    },
+                    onDownloadClick = {
+                        playerState.currentTrack?.let { t ->
+                            if (viewModel.isTrackDownloaded(t.id)) {
+                                viewModel.deleteDownloadedTrack(t.id)
+                                Toast.makeText(context, "Removed from offline storage", Toast.LENGTH_SHORT).show()
+                            } else {
+                                viewModel.downloadTrack(t)
+                                Toast.makeText(context, "Downloading for offline listening...", Toast.LENGTH_SHORT).show()
+                            }
+                        }
+                    },
+                    onOpenSpeedSheet = { viewModel.openPlaybackSpeedSheet() }
                 )
             }
 
@@ -1907,14 +2311,50 @@ fun MainScreen(
                 )
             }
 
-            // Create Playlist / Custom Album Dialog
-            PixelCreatePlaylistDialog(
-                visible = isCreatePlaylistDialogVisible,
-                onDismiss = { viewModel.closeCreatePlaylistDialog() },
-                onCreate = { name, desc, isAlbum ->
-                    viewModel.createPlaylist(name, desc, isAlbum)
-                }
-            )
+            // Playback Speed & Audio Engine Sheet Scrim
+            AnimatedVisibility(
+                visible = isPlaybackSpeedSheetVisible,
+                enter = fadeIn(animationSpec = tween(220)),
+                exit = fadeOut(animationSpec = tween(200)),
+                modifier = Modifier.fillMaxSize()
+            ) {
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color.Black.copy(alpha = 0.65f))
+                        .clickable(
+                            interactionSource = remember { MutableInteractionSource() },
+                            indication = null
+                        ) {
+                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                            viewModel.closePlaybackSpeedSheet()
+                        }
+                )
+            }
+
+            // Playback Speed & Audio Engine Bottom Sheet
+            AnimatedVisibility(
+                visible = isPlaybackSpeedSheetVisible,
+                enter = slideInVertically(
+                    initialOffsetY = { it },
+                    animationSpec = spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow)
+                ),
+                exit = slideOutVertically(
+                    targetOffsetY = { it },
+                    animationSpec = spring(dampingRatio = 0.85f, stiffness = Spring.StiffnessMediumLow)
+                ),
+                modifier = Modifier.align(Alignment.BottomCenter)
+            ) {
+                PixelPlaybackSpeedSheet(
+                    currentSpeed = playerState.playbackSpeed,
+                    isCrossfadeEnabled = playerState.isCrossfadeEnabled,
+                    crossfadeDurationSec = playerState.crossfadeDurationSec,
+                    onSpeedSelected = { viewModel.setPlaybackSpeed(it) },
+                    onCrossfadeToggled = { viewModel.setCrossfade(it, playerState.crossfadeDurationSec) },
+                    onCrossfadeDurationChanged = { viewModel.setCrossfade(playerState.isCrossfadeEnabled, it) },
+                    onDismiss = { viewModel.closePlaybackSpeedSheet() }
+                )
+            }
         }
     }
 }
