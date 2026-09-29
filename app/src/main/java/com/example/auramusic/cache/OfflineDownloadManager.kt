@@ -87,7 +87,15 @@ class OfflineDownloadManager private constructor(private val context: Context) {
             // 1. If content:// URI (from device storage)
             if (track.audioUrl.startsWith("content://") || track.audioUrl.startsWith("file://")) {
                 try {
-                    val targetFile = File(downloadDir, "offline_${sanitizedId}.mp3")
+                    val ext = when {
+                        track.audioUrl.contains(".flac", ignoreCase = true) || track.localFilePath?.endsWith(".flac", ignoreCase = true) == true -> ".flac"
+                        track.audioUrl.contains(".opus", ignoreCase = true) || track.localFilePath?.endsWith(".opus", ignoreCase = true) == true -> ".opus"
+                        track.audioUrl.contains(".ogg", ignoreCase = true) || track.localFilePath?.endsWith(".ogg", ignoreCase = true) == true -> ".ogg"
+                        track.audioUrl.contains(".m4a", ignoreCase = true) || track.localFilePath?.endsWith(".m4a", ignoreCase = true) == true -> ".m4a"
+                        track.audioUrl.contains(".mp4", ignoreCase = true) || track.localFilePath?.endsWith(".mp4", ignoreCase = true) == true -> ".mp4"
+                        else -> ".mp3"
+                    }
+                    val targetFile = File(downloadDir, "offline_${sanitizedId}$ext")
                     val uri = android.net.Uri.parse(track.audioUrl)
                     val input = if (track.audioUrl.startsWith("content://")) {
                         context.contentResolver.openInputStream(uri)
@@ -101,9 +109,14 @@ class OfflineDownloadManager private constructor(private val context: Context) {
                         }
                     }
 
+                    if (!targetFile.exists() || targetFile.length() <= 0L) {
+                        throw Exception("Cached file is empty")
+                    }
+
                     val completedTrack = track.copy(
                         isCachedOffline = true,
                         localFilePath = targetFile.absolutePath,
+                        audioUrl = android.net.Uri.fromFile(targetFile).toString(),
                         qualityBadge = "OFFLINE"
                     )
 
@@ -130,7 +143,15 @@ class OfflineDownloadManager private constructor(private val context: Context) {
             var outputStream: FileOutputStream? = null
 
             try {
-                val targetFile = File(downloadDir, "offline_${sanitizedId}.m4a")
+                val ext = when {
+                    track.audioUrl.contains(".mp4", ignoreCase = true) || track.audioUrl.contains(".m4a", ignoreCase = true) -> ".m4a"
+                    track.audioUrl.contains(".flac", ignoreCase = true) -> ".flac"
+                    track.audioUrl.contains(".ogg", ignoreCase = true) -> ".ogg"
+                    track.audioUrl.contains(".opus", ignoreCase = true) -> ".opus"
+                    track.audioUrl.contains(".wav", ignoreCase = true) -> ".wav"
+                    else -> ".mp3"
+                }
+                val targetFile = File(downloadDir, "offline_${sanitizedId}$ext")
 
                 var currentUrl = track.audioUrl
                 var redirects = 0
@@ -187,9 +208,14 @@ class OfflineDownloadManager private constructor(private val context: Context) {
 
                 outputStream.flush()
 
+                if (!targetFile.exists() || targetFile.length() <= 0L) {
+                    throw Exception("Downloaded file is empty")
+                }
+
                 val completedTrack = track.copy(
                     isCachedOffline = true,
                     localFilePath = targetFile.absolutePath,
+                    audioUrl = if (track.audioUrl.isNotBlank()) track.audioUrl else android.net.Uri.fromFile(targetFile).toString(),
                     qualityBadge = "320K OFFLINE"
                 )
 
@@ -249,14 +275,17 @@ class OfflineDownloadManager private constructor(private val context: Context) {
                 val id = obj.optString("id")
                 val localPath = obj.optString("localPath")
 
-                if (id.isNotBlank() && localPath.isNotBlank() && File(localPath).exists()) {
+                val file = File(localPath)
+                if (id.isNotBlank() && localPath.isNotBlank() && file.exists() && file.length() > 0L) {
+                    val persistedAudioUrl = obj.optString("audioUrl", "")
+                    val finalAudioUrl = if (persistedAudioUrl.isNotBlank()) persistedAudioUrl else android.net.Uri.fromFile(file).toString()
                     val track = Track(
                         id = id,
                         title = obj.optString("title", "Unknown"),
                         artist = obj.optString("artist", "Unknown"),
                         album = obj.optString("album", "Downloaded Album"),
                         durationMs = obj.optLong("durationMs", 180000L),
-                        audioUrl = obj.optString("audioUrl", ""),
+                        audioUrl = finalAudioUrl,
                         coverArtUrl = obj.optString("coverArtUrl", ""),
                         source = StreamingSource.LOCAL_STORAGE,
                         qualityBadge = "320K OFFLINE",
@@ -290,7 +319,7 @@ class OfflineDownloadManager private constructor(private val context: Context) {
                     put("artist", track.artist)
                     put("album", track.album)
                     put("durationMs", track.durationMs)
-                    put("audioUrl", track.audioUrl)
+                    put("audioUrl", if (track.audioUrl.isNotBlank()) track.audioUrl else (track.localFilePath ?: ""))
                     put("coverArtUrl", track.coverArtUrl)
                     put("localPath", track.localFilePath ?: "")
                 }
