@@ -39,38 +39,61 @@ class LyricsService {
         val coreTitle = extractCoreTitle(cleanTitle)
 
         try {
-            // 1. Check built-in verified karaoke sync bank first (instant 0ms response)
-            val preloaded = getVerifiedBankLyrics(track, cleanTitle)
-            if (preloaded != null) {
-                lyricsCache[cacheKey] = preloaded
-                return@withContext preloaded
+            // 1. High-precision LRCLIB direct get if artist and title are available
+            if (cleanTitle.isNotBlank() && cleanArtist.isNotBlank()) {
+                val direct = fetchLrclibDirect(track, cleanTitle, cleanArtist)
+                if (direct != null && direct.hasLines) {
+                    lyricsCache[cacheKey] = direct
+                    return@withContext direct
+                }
             }
 
-            // 2. High-yield single search on LRCLIB: returns up to 20 candidate tracks
-            // Scored in-memory by synced status, artist match, title match, and duration
-            val searchCandidate = searchLrclibLyrics(track, cleanTitle)
-            if (searchCandidate != null && searchCandidate.hasLines) {
-                lyricsCache[cacheKey] = searchCandidate
-                return@withContext searchCandidate
+            // 2. High-yield combined search on LRCLIB: "Title Artist"
+            val combinedQuery = if (cleanArtist.isNotBlank()) "$cleanTitle $cleanArtist" else cleanTitle
+            val combinedCandidate = searchLrclibLyrics(track, combinedQuery)
+            if (combinedCandidate != null && combinedCandidate.isSynced && combinedCandidate.hasLines) {
+                lyricsCache[cacheKey] = combinedCandidate
+                return@withContext combinedCandidate
             }
 
-            // 3. If coreTitle differs from cleanTitle, try coreTitle as fallback
+            // 3. Search LRCLIB with cleanTitle
+            val titleCandidate = searchLrclibLyrics(track, cleanTitle)
+            if (titleCandidate != null && titleCandidate.isSynced && titleCandidate.hasLines) {
+                lyricsCache[cacheKey] = titleCandidate
+                return@withContext titleCandidate
+            }
+
+            // 4. Fallback search LRCLIB with coreTitle (if different from cleanTitle)
             if (coreTitle.isNotBlank() && !coreTitle.equals(cleanTitle, ignoreCase = true)) {
                 val coreCandidate = searchLrclibLyrics(track, coreTitle)
-                if (coreCandidate != null && coreCandidate.hasLines) {
+                if (coreCandidate != null && coreCandidate.isSynced && coreCandidate.hasLines) {
                     lyricsCache[cacheKey] = coreCandidate
                     return@withContext coreCandidate
                 }
             }
 
-            // 4. Try JioSaavn official lyrics endpoint
+            // 5. Query JioSaavn official lyrics endpoint (top hit for Indian / regional catalog)
             val saavnLyrics = fetchSaavnLyrics(track, cleanTitle)
             if (saavnLyrics != null && saavnLyrics.hasLines) {
                 lyricsCache[cacheKey] = saavnLyrics
                 return@withContext saavnLyrics
             }
 
-            // 5. If no authentic lyrics exist anywhere, return clean empty lyrics (no fake acoustic text)
+            // 6. If LRCLIB returned plain/unsynced lyrics candidates, use dynamic cadence
+            val bestUnsyncedLrclib = combinedCandidate ?: titleCandidate
+            if (bestUnsyncedLrclib != null && bestUnsyncedLrclib.hasLines) {
+                lyricsCache[cacheKey] = bestUnsyncedLrclib
+                return@withContext bestUnsyncedLrclib
+            }
+
+            // 7. Check built-in verified karaoke sync bank as fallback (for offline or local regional tracks like Basinga)
+            val bankLyrics = getVerifiedBankLyrics(track, cleanTitle)
+            if (bankLyrics != null && bankLyrics.hasLines) {
+                lyricsCache[cacheKey] = bankLyrics
+                return@withContext bankLyrics
+            }
+
+            // 8. If no authentic lyrics exist anywhere, return clean empty state
             val fallbackLyrics = getFallbackLyricsForTrack(track)
             lyricsCache[cacheKey] = fallbackLyrics
             fallbackLyrics
@@ -80,6 +103,36 @@ class LyricsService {
             lyricsCache[cacheKey] = fallback
             fallback
         }
+    }
+
+    /**
+     * Direct single-track lookup using LRCLIB /api/get endpoint
+     */
+    private fun fetchLrclibDirect(track: Track, cleanTitle: String, cleanArtist: String): TrackLyrics? {
+        try {
+            val urlString = "$LRCLIB_GET_URL?track_name=${encode(cleanTitle)}&artist_name=${encode(cleanArtist)}"
+            val response = makeHttpRequest(urlString) ?: return null
+            val obj = JSONObject(response)
+            val synced = obj.optString("syncedLyrics", "").trim()
+            if (synced.isNotBlank()) {
+                val parsedLines = parseLrc(synced)
+                if (parsedLines.size >= 3) {
+                    val plain = obj.optString("plainLyrics", "").trim()
+                    return TrackLyrics(
+                        trackId = track.id,
+                        title = track.title,
+                        artist = track.artist,
+                        isSynced = true,
+                        lines = parsedLines,
+                        plainLyrics = plain.ifBlank { synced },
+                        source = "LRCLIB Karaoke Sync"
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "LRCLIB direct get failed for ${track.title}", e)
+        }
+        return null
     }
 
     private fun searchLrclibLyrics(track: Track, query: String): TrackLyrics? {
@@ -111,7 +164,11 @@ class LyricsService {
                 if (synced.isBlank() && plain.isBlank()) continue
 
                 var score = 0
-                if (synced.isNotBlank()) score += 1000
+                if (synced.isNotBlank()) {
+                    score += 1000
+                    if (synced.length > 800) score += 300
+                    else if (synced.length > 400) score += 150
+                }
                 if (plain.isNotBlank()) score += 100
 
                 // Artist matching bonus
@@ -314,7 +371,7 @@ class LyricsService {
         val lineWeights = rawLines.map { line ->
             val words = line.split(Regex("\\s+")).filter { it.isNotBlank() }.size
             val chars = line.length
-            (words * 2.5 + chars * 0.4).coerceIn(4.0, 45.0)
+            (words * 2.5 + chars * 0.4).coerceIn(4.0, 50.0)
         }
         val totalWeight = lineWeights.sum().coerceAtLeast(1.0)
 
@@ -322,8 +379,9 @@ class LyricsService {
         val result = mutableListOf<LyricLine>()
 
         rawLines.forEachIndexed { index, text ->
-            val lineDuration = ((lineWeights[index] / totalWeight) * availableSingingWindowMs).toLong().coerceIn(1800L, 8500L)
-            result.add(LyricLine(timestampMs = accumulatedTime.coerceAtMost(validDuration), text = text))
+            val lineRatio = lineWeights[index] / totalWeight
+            val lineDuration = (lineRatio * availableSingingWindowMs).toLong().coerceAtLeast(1500L)
+            result.add(LyricLine(timestampMs = accumulatedTime.coerceAtMost(validDuration - 3000L), text = text))
             accumulatedTime += lineDuration
         }
 
@@ -486,317 +544,6 @@ class LyricsService {
                 [01:21.05] మన్ను తిన్న ముద్ద ఇది ఆయా షేర్
                 [01:31.00] ఆయా షేర్ ఆయా షేర్ ఆయా షేర్
                 [01:38.50] దమ్కీల పంజా విసిరినాడు ఆయా షేర్!
-            """.trimIndent()
-
-            titleLower.contains("gehra hua") -> """
-                [00:17.10] तू अगर मेरी, ये हवाएँ तेरी
-                [00:21.03] तू अगर मेरी, सारी राहें तेरी
-                [00:24.96] तू अगर मेरी, मैं हूँ तेरा
-                [00:32.67] तू अगर मेरी, ये उजाले तेरे
-                [00:36.50] तू अगर मेरी, दिल हवाले तेरे
-                [00:40.32] तू अगर मेरी, मैं हूँ तेरा
-                [00:47.09] बेताब सा मोहब्बत का तू इंक़लाब है
-                [00:54.78] मेरा जहाँ तेरी बाँहों में ख़्वाब-ख़्वाब है
-                [01:02.36] गहरा हुआ, गहरा हुआ
-                [01:06.12] गहरा हुआ ये असर तेरा
-                [01:10.05] गहरा हुआ, गहरा हुआ
-                [01:13.88] मुझमें बसर तेरा
-                [01:17.80] तू अगर मेरी, ये हवाएँ तेरी
-                [01:21.65] तू अगर मेरी, मैं हूँ तेरा!
-            """.trimIndent()
-
-            titleLower.contains("hanuman chalisa") -> """
-                [00:02.58] श्रीगुरु चरन सरोज रज निज मनु मुकुरु सुधारि
-                [00:14.36] बरनऊँ रघुबर बिमल जसु जो दायकु फल चारि
-                [00:24.92] बुद्धिहीन तनु जानिके सुमिरौं पवन-कुमार
-                [00:36.27] बल बुद्धि बिद्या देहु मोहिं हरहु कलेस बिकार
-                [00:56.92] जय हनुमान ज्ञान गुन सागर
-                [01:02.16] जय कपीस तिहुँ लोक उजागर
-                [01:07.60] राम दूत अतुलित बल धामा
-                [01:12.97] अंजनि-पुत्र पवनसुत नामा
-                [01:18.25] महाबीर बिक्रम बजरंगी
-                [01:23.60] कुमति निवार सुमति के संगी
-                [01:28.95] कंचन बरन बिराज सुबेसा
-                [01:34.30] कानन कुंडल कुंचित केसा
-                [01:39.65] हाथ बज्र औ ध्वजा बिराजै
-                [01:45.00] काँधे मूँज जनेऊ साजै
-                [01:50.35] संकर सुवन केसरीनंदन
-                [01:55.70] तेज प्रताप महा जग बन्दन!
-            """.trimIndent()
-
-            titleLower.contains("tera mera rishta") -> """
-                [00:12.50] Tera mera rishta hai kaisa
-                [00:18.20] Ek pal door gawara nahi
-                [00:24.80] Tere liye har roz hain jeete
-                [00:30.40] Tujhko diya mera waqt sabhi
-                [00:37.20] Koi lamha mera na ho tere bina
-                [00:43.50] Har saans pe naam tera
-                [00:50.00] Kyun ki tum hi ho, ab tum hi ho
-                [00:56.50] Zindagi ab tum hi ho
-                [01:03.20] Chain bhi, mera dard bhi
-                [01:09.50] Meri aashiqui ab tum hi ho
-                [01:16.80] Tere liye hi jiya main
-                [01:23.20] Khudko jo yun de diya hai
-                [01:29.80] Teri wafa ne mujhko sambhala
-                [01:36.40] Saare ghamon ko dil se nikala
-                [01:43.00] Tere saath mera hai naseeb juda
-                [01:49.50] Tujhe paake adhura na raha
-            """.trimIndent()
-
-            titleLower.contains("radhimaa") -> """
-                [00:14.20] Kanmani unnai paartha naal muthal
-                [00:19.50] En manam unnai thedi alaiyuthe
-                [00:24.80] Radhimaa en Radhimaa
-                [00:29.20] Un vizhi pesum mozhi athisayam
-                [00:34.50] Kaadhal ennum vanavil thonruthe
-                [00:39.80] Radhimaa en Radhimaa
-                [00:44.20] Un siripinil kandaen anbin aalam
-                [00:49.50] En uyirinil sernthaai endrum kaalam
-                [00:54.80] Radhimaa en Radhimaa!
-            """.trimIndent()
-
-            titleLower.contains("tauba tauba") -> """
-                [00:08.50] Husn tera tauba tauba
-                [00:12.80] Teriyan akhiyan tauba tauba
-                [00:17.20] Nachdi tu lagdi kamaal
-                [00:21.50] Mundeya da kardi bura haal
-                [00:25.80] O tauba tauba o tauba tauba
-                [00:30.20] Nakhra tera tauba tauba
-                [00:34.50] Chhad de tu saare gile
-                [00:38.80] Aaja mere naal tu nache!
-            """.trimIndent()
-
-            titleLower.contains("kesariya") -> """
-                [00:15.50] Mujhko itna bataye koi
-                [00:19.80] Kaise tujhse dil na lagaye koi
-                [00:24.20] Rab ne banaya tujhe jaise mere liye
-                [00:28.50] Har mod pe tu hi dikhe
-                [00:32.80] Kesariya tera ishq hai piya
-                [00:38.20] Rang jaaun jo main haath lagaun
-                [00:43.50] Din beete saara teri fikr mein
-                [00:48.80] Rain saari tere khair manaun
-                [00:54.20] Kesariya tera ishq hai piya!
-            """.trimIndent()
-
-            titleLower.contains("believer") -> """
-                [00:07.82] First things first
-                [00:09.20] I'ma say all the words inside my head
-                [00:11.80] I'm fired up and tired of the way that things have been, oh-ooh
-                [00:17.10] The way that things have been, oh-ooh
-                [00:22.40] Second thing second
-                [00:24.10] Don't you tell me what you think that I could be
-                [00:27.20] I'm the one at the sail, I'm the master of my sea, oh-ooh
-                [00:32.40] The master of my sea, oh-ooh
-                [00:36.50] I was broken from a young age
-                [00:38.20] Taking my sulking to the masses
-                [00:40.40] Writing my poems for the few
-                [00:42.10] That look at me, took to me, shook to me, feeling me
-                [00:44.80] Singing from heartache from the pain
-                [00:46.80] Taking my message from the veins
-                [00:48.80] Speaking my lesson from the brain
-                [00:50.80] Seeing the beauty through the pain
-                [00:53.20] You made me a, you made me a believer, believer
-                [01:00.80] Pain! You break me down and build me up, believer, believer
-                [01:08.50] Pain! Oh, let the bullets fly, oh, let them rain
-                [01:13.20] My life, my love, my drive, it came from pain
-                [01:17.80] You made me a, you made me a believer, believer
-            """.trimIndent()
-
-            titleLower.contains("starboy") -> """
-                [00:06.10] I'm tryna put you in the worst mood, ah
-                [00:09.80] P1 cleaner than your church shoes, ah
-                [00:13.40] Milli point two just to hurt you, ah
-                [00:17.20] All red Lamb' just to tease you, ah
-                [00:21.00] None of these toys on lease too, ah
-                [00:24.50] Made your whole year in a week too, yah
-                [00:28.20] Main girl out of your league too, ah
-                [00:32.00] Side girl out of your league too, ah
-                [00:35.80] Look what you've done
-                [00:38.20] I'm a starboy
-                [00:42.00] Look what you've done
-                [00:45.50] I'm a starboy
-                [00:49.50] Every day they try to test me, ah
-                [00:53.20] Every day they try to end me, ah
-                [00:57.00] Pull up in the Roadster SV, ah
-                [01:00.80] Pockets overweight, gettin' hefty, ah
-            """.trimIndent()
-
-            titleLower.contains("yellow") -> """
-                [00:35.66] Look at the stars
-                [00:38.46] Look how they shine for you
-                [00:44.17] And everything you do
-                [00:49.66] Yeah, they were all yellow
-                [00:52.66] I came along
-                [00:55.42] I wrote a song for you
-                [01:00.69] And all the things you do
-                [01:06.24] And it was called "Yellow"
-                [01:13.25] So then I took my turn
-                [01:17.25] Oh, what a thing to have done
-                [01:22.48] And it was all yellow
-                [01:30.73] Your skin, oh yeah, your skin and bones
-                [01:36.72] Turn into something beautiful
-                [01:42.34] And you know, you know I love you so
-                [01:50.51] You know I love you so
-            """.trimIndent()
-
-            titleLower.contains("tum ho wahi") -> """
-                [00:12.50] Tum ho wahi, tum ho wahi, tum ho wahi
-                [00:17.80] Jisko kabhi khona nahi
-                [00:23.20] Tum ho wahi, tum ho wahi, tum ho wahi
-                [00:28.50] Tum ho wahi ho
-                [00:32.10] You are the one for me
-                [00:36.40] Ho tum ho wahi
-                [00:39.80] Ho you are the one for me
-                [00:44.20] Kaisa ye shama hai dekho to zara
-                [00:48.80] Kisi naye jaadu se bhara
-                [00:53.40] Ho tujhko na pata ho to main doon bata
-                [00:58.20] Tune ye jaadu hai kiya
-                [01:03.50] O thoda sa hoon mera
-                [01:07.80] Baaki main hoon tera
-                [01:12.40] Chalna hai aage ab tere hi saath
-                [01:17.20] Haathon mein leke tera haath
-                [01:21.80] Tum ho wahi, tum ho wahi, tum ho wahi
-                [01:27.20] Jisko kabhi khona nahi
-                [01:32.40] Tum ho wahi, tum ho wahi, tum ho wahi
-                [01:37.60] Tum ho wahi ho
-                [01:41.20] You are the one for me
-                [01:45.50] Ho tum ho wahi
-                [01:49.00] Ho you are the one for me
-            """.trimIndent()
-
-            titleLower.contains("dil ibaadat") || titleLower.contains("dil ibadat") -> """
-                [00:15.28] Dil ibaadat kar raha hai
-                [00:18.15] Dhadkane meri sun
-                [00:21.02] Tujhko main kar loon haasil
-                [00:23.85] Lagi hai yahi dhun
-                [00:26.50] Zindagi ki shaakh se loon
-                [00:29.40] Kuch haseen pal main chun
-                [00:32.10] Tujhko main kar loon haasil
-                [00:34.90] Lagi hai yahi dhun
-                [00:37.80] Dil ibaadat kar raha hai
-                [00:40.50] Dhadkane meri sun
-                [00:43.20] Tujhko main kar loon haasil
-                [00:45.90] Lagi hai yahi dhun
-                [00:54.50] Jo bhi jitne pal jeeyoon, unhe tere sang jeeyoon
-                [01:01.20] Jo bhi kal ho ab mera, usse tere sang jeeyoon
-                [01:07.80] Jo bhi saansein main bharoon, unhe tere sang bharoon
-                [01:14.50] Chaahe jo ho raasta, usse tere sang chaloo
-                [01:21.80] Dil ibaadat kar raha hai
-                [01:24.50] Dhadkane meri sun
-                [01:27.20] Tujhko main kar loon haasil
-                [01:30.00] Lagi hai yahi dhun
-                [01:42.50] Mujhko de tu mit jaane, ab khud se de mil jaane
-                [01:48.80] Kyun hai yeh itna faasla
-                [01:54.20] Lamhe yeh phir na aane, inko tu na de jaane
-                [02:00.60] Tu mujhpe khud ko de lutaa
-                [02:06.50] Tujhe tujhse tod loon, kahin khud se jod loon
-                [02:13.20] Mere jism-o-jaan pe aa, teri khushboo odh loon
-                [02:22.00] Dil ibaadat kar raha hai, dhadkane meri sun
-                [02:27.50] Tujhko main kar loon haasil, lagi hai yahi dhun
-            """.trimIndent()
-
-            titleLower.contains("barbaad") -> """
-                [00:14.20] Tujhse door main ek hi wajah ke liye hoon
-                [00:19.80] Kamzor ho jaata hoon main
-                [00:24.50] Tujhse door main ek hi wajah ke liye hoon
-                [00:29.80] Aawaara ban jaata hoon main
-                [00:35.20] Tujhe chhoo loon toh kuch mujhe ho jaayega
-                [00:40.50] Jo main chahta na ho mujhko
-                [00:45.60] Tujhe mil ke yeh dil mera beh jaayega
-                [00:50.80] Isi baat ka darr hai mujhko
-                [00:55.50] Ke ho na jaaye pyaar tumse mujhe
-                [01:00.80] Kar dega barbaad ishq mujhe
-                [01:06.20] Ho na jaaye pyaar tumse mujhe
-                [01:11.40] Behad-beshumaar tumse, tumse
-                [01:21.80] Teri nazdikiyon mein kaisa khumaar hai
-                [01:27.20] Teri qurbat se mera dil kyun beqaraar hai
-                [01:32.50] Kyun yeh mit-ti nahin hai, kaisi yeh pyaas hai
-                [01:37.80] Jitna main door jaaun, utni hi tu paas hai
-                [01:43.00] Ke ho na jaaye pyaar tumse mujhe
-                [01:48.20] Kar dega barbaad ishq mujhe
-                [01:53.50] Ho na jaaye pyaar tumse mujhe
-                [01:58.80] Behad-beshumaar tumse
-            """.trimIndent()
-
-            titleLower.contains("arz kiya hai") -> """
-                [00:10.50] Kaayar jo the, vo shayar bane
-                [00:16.80] Ab kya kya karein ye ishq mein
-                [00:23.20] Na kehte the kuch jo, lage khoj mein
-                [00:29.80] Kya lafz chune?
-                [00:35.20] Naye aashiq ye, ishq mein tere hain faiz bane
-                [00:42.50] Arz kiya hai
-                [00:46.80] Humne bhi likha kuch tere baare mein
-                [00:53.20] Aise tu lage ki gulaab hai
-                [00:58.80] Aur aise tu lage ki gulaab hai
-                [01:04.20] Baghon mein dil ke, khilke in fizaaon mein chhaye ho haaye
-                [01:12.50] Aur vaise hum to tere hi gulaam hain
-                [01:18.00] Baadshah dil ke, teri baazi mein, jo tu chahe to
-                [01:28.50] Haathon ko sambhaale mere haathon mein
-                [01:35.20] Jab tak neend na aaye in lakeeron mein
-                [01:42.00] Baatein hon… haaye
-            """.trimIndent()
-
-            titleLower.contains("vaaroon") -> """
-                [00:12.80] Bandha nainon ne nainon se dora
-                [00:18.50] Mohe kheenche chala moh tora
-                [00:24.20] Tohe saunpa hai tan mann ye kora
-                [00:30.00] Mohe thaame tu rakhna sada
-                [00:36.50] Vaaroon, vaaroon main vaaroon tori
-                [00:42.20] Ab na jag ki hai parvaah koi
-                [00:48.00] Thaam le tu mori jindagi
-                [00:53.80] Tohse badh ke na koi khushi
-                [01:00.20] Vaaroon, vaaroon main vaaroon tori
-                [01:06.00] Aaj saunpe hai sapne sabhi
-                [01:11.80] Naina tore tijori mori
-                [01:17.50] Hai mori...
-                [01:24.00] Pheeka pheeka tha manwa ye mora
-                [01:29.80] Chhoo ke toone bhara rang tora
-                [01:35.50] Mele jaisa saja hai ye angana
-                [01:41.20] Tohre aane se dil ka mora
-            """.trimIndent()
-
-            titleLower.contains("casa tupka") -> """
-                [00:08.50] Imma shake yo world imma break it down
-                [00:12.80] Teekha eyeliner lemme fix that crown
-                [00:17.20] Juuls on my body gold and brown, now bow down
-                [00:22.00] Mera nasha chadhe sir pe hai zehreela
-                [00:26.50] Imma spin your head jaise tequila
-                [00:31.00] Vision so bright ye na dekh pa re
-                [00:35.50] Gold waist chain maare lashkaare
-                [00:40.00] Ain't no gold digger chaubis carat soul meri
-                [00:44.80] Dil hue chori sab ke international robbery
-                [00:49.20] Casa casa casa casa casa tupka tequila
-                [00:53.80] Casa casa casa casa casa tupka tequila
-                [00:58.50] Party karni party pehle yo yo bulao
-                [01:03.00] Police toh agayi ab aunty bulao
-                [01:07.50] Party all nighter kambal uthao
-                [01:12.00] Bada hot hai weather jab baje reggaeto
-                [01:16.80] Lemme take you baby girl chalo mexico
-                [01:21.50] Casa casa casa casa casa tupka tequila
-            """.trimIndent()
-
-            titleLower.contains("parvati") -> """
-                [00:08.20] Shambhu, Shiv Shambhu, Bholenath...
-                [00:15.50] Jab zid pe aa gayi Parvati
-                [00:22.80] Bhole ko paane nikal padi
-                [00:30.00] Tap ki aag mein jal ke dekha
-                [00:37.50] Har bandhan ko chhod diya
-                [00:45.00] Shiv ki lagan mein magan huyi
-                [00:52.20] Man mein basaya Bholenath
-                [00:59.80] Om Namah Shivaya gunje man mein
-                [01:07.50] Shiv Parvati ka pavitra sangam
-                [01:15.00] Shambhu, Shiv Shambhu, Bholenath...
-            """.trimIndent()
-
-            titleLower.contains("afsaana") || titleLower.contains("afsana") -> """
-                [00:12.00] Afsaana banaaya aapne
-                [00:17.50] Dil mein bithaaya aapne
-                [00:23.00] Khwabon ko sajeela kar diya
-                [00:28.50] Jab se gale lagaaya aapne
-                [00:34.20] Yeh kaisa nasha hai chhaane laga
-                [00:40.00] Har pal tera naam aane laga
-                [00:45.80] Afsaana banaaya aapne
-                [00:51.50] Dil mein bithaaya aapne
             """.trimIndent()
 
             titleLower.contains("interstellar") || titleLower.contains("zimmer") -> """
