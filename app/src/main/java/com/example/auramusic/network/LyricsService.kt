@@ -30,70 +30,99 @@ class LyricsService {
     // In-memory cache for ultra-fast instant 0ms retrieval
     private val lyricsCache = ConcurrentHashMap<String, TrackLyrics>()
 
+    /**
+     * Universal Dynamic Lyrics Resolution Pipeline:
+     * Resolves accurate, full-length, synchronized karaoke lyrics for ANY song
+     * without relying on hardcoded entries.
+     */
     suspend fun getLyrics(track: Track): TrackLyrics = withContext(Dispatchers.IO) {
         val cacheKey = "${track.id}_${track.title}_${track.artist}".lowercase()
         lyricsCache[cacheKey]?.let { return@withContext it }
 
         val cleanTitle = sanitizeTitle(track.title)
-        val cleanArtist = sanitizeArtist(track.artist)
+        val artists = getArtistCandidates(track.artist)
+        val primaryArtist = artists.firstOrNull() ?: sanitizeArtist(track.artist)
         val coreTitle = extractCoreTitle(cleanTitle)
 
         try {
-            // 1. High-precision LRCLIB direct get if artist and title are available
-            if (cleanTitle.isNotBlank() && cleanArtist.isNotBlank()) {
-                val direct = fetchLrclibDirect(track, cleanTitle, cleanArtist)
+            // Stage 1: LRCLIB Direct /api/get (fast 1-request match if artist and title are accurate)
+            if (cleanTitle.isNotBlank() && primaryArtist.isNotBlank()) {
+                val direct = fetchLrclibDirect(track, cleanTitle, primaryArtist)
                 if (direct != null && direct.hasLines) {
                     lyricsCache[cacheKey] = direct
                     return@withContext direct
                 }
             }
 
-            // 2. High-yield combined search on LRCLIB: "Title Artist"
-            val combinedQuery = if (cleanArtist.isNotBlank()) "$cleanTitle $cleanArtist" else cleanTitle
-            val combinedCandidate = searchLrclibLyrics(track, combinedQuery)
-            if (combinedCandidate != null && combinedCandidate.isSynced && combinedCandidate.hasLines) {
-                lyricsCache[cacheKey] = combinedCandidate
-                return@withContext combinedCandidate
-            }
-
-            // 3. Search LRCLIB with cleanTitle
-            val titleCandidate = searchLrclibLyrics(track, cleanTitle)
-            if (titleCandidate != null && titleCandidate.isSynced && titleCandidate.hasLines) {
-                lyricsCache[cacheKey] = titleCandidate
-                return@withContext titleCandidate
-            }
-
-            // 4. Fallback search LRCLIB with coreTitle (if different from cleanTitle)
-            if (coreTitle.isNotBlank() && !coreTitle.equals(cleanTitle, ignoreCase = true)) {
-                val coreCandidate = searchLrclibLyrics(track, coreTitle)
-                if (coreCandidate != null && coreCandidate.isSynced && coreCandidate.hasLines) {
-                    lyricsCache[cacheKey] = coreCandidate
-                    return@withContext coreCandidate
+            // Stage 2: LRCLIB Structured Search (track_name + primary artist)
+            if (cleanTitle.isNotBlank() && primaryArtist.isNotBlank()) {
+                val candidate = queryLrclibStructured(track, cleanTitle, primaryArtist)
+                if (candidate != null && candidate.isSynced && candidate.hasLines) {
+                    lyricsCache[cacheKey] = candidate
+                    return@withContext candidate
                 }
             }
 
-            // 5. Query JioSaavn official lyrics endpoint (top hit for Indian / regional catalog)
+            // Stage 3: LRCLIB Structured Search with secondary artist(s) (for duets/collabs)
+            if (cleanTitle.isNotBlank() && artists.size > 1) {
+                for (secondary in artists.drop(1)) {
+                    val candidate = queryLrclibStructured(track, cleanTitle, secondary)
+                    if (candidate != null && candidate.isSynced && candidate.hasLines) {
+                        lyricsCache[cacheKey] = candidate
+                        return@withContext candidate
+                    }
+                }
+            }
+
+            // Stage 4: LRCLIB Track-Only Structured Search (track_name without artist constraint)
+            // Evaluates up to 20 candidates scored by artist token matching and duration delta
+            if (cleanTitle.isNotBlank()) {
+                val candidate = queryLrclibStructured(track, cleanTitle, null)
+                if (candidate != null && candidate.isSynced && candidate.hasLines) {
+                    lyricsCache[cacheKey] = candidate
+                    return@withContext candidate
+                }
+            }
+
+            // Stage 5: LRCLIB Core Title Search (removes hyphens, subtitles, e.g. "Song - Live")
+            if (coreTitle.isNotBlank() && !coreTitle.equals(cleanTitle, ignoreCase = true)) {
+                val candidate = queryLrclibStructured(track, coreTitle, primaryArtist.ifBlank { null })
+                if (candidate != null && candidate.isSynced && candidate.hasLines) {
+                    lyricsCache[cacheKey] = candidate
+                    return@withContext candidate
+                }
+            }
+
+            // Stage 6: LRCLIB Full-Text Fuzzy Search fallback (?q=Title Artist)
+            val combinedQuery = if (primaryArtist.isNotBlank()) "$cleanTitle $primaryArtist" else cleanTitle
+            val fuzzyCandidate = queryLrclibFuzzy(track, combinedQuery)
+            if (fuzzyCandidate != null && fuzzyCandidate.isSynced && fuzzyCandidate.hasLines) {
+                lyricsCache[cacheKey] = fuzzyCandidate
+                return@withContext fuzzyCandidate
+            }
+
+            // Stage 7: JioSaavn Official Lyrics API (top provider for Indian / Bollywood / Regional catalog)
             val saavnLyrics = fetchSaavnLyrics(track, cleanTitle)
             if (saavnLyrics != null && saavnLyrics.hasLines) {
                 lyricsCache[cacheKey] = saavnLyrics
                 return@withContext saavnLyrics
             }
 
-            // 6. If LRCLIB returned plain/unsynced lyrics candidates, use dynamic cadence
-            val bestUnsyncedLrclib = combinedCandidate ?: titleCandidate
-            if (bestUnsyncedLrclib != null && bestUnsyncedLrclib.hasLines) {
-                lyricsCache[cacheKey] = bestUnsyncedLrclib
-                return@withContext bestUnsyncedLrclib
+            // Stage 8: If LRCLIB returned plain/unsynced lyrics candidates, use dynamic cadence
+            val bestPlain = fuzzyCandidate ?: queryLrclibStructured(track, cleanTitle, null)
+            if (bestPlain != null && bestPlain.hasLines) {
+                lyricsCache[cacheKey] = bestPlain
+                return@withContext bestPlain
             }
 
-            // 7. Check built-in verified karaoke sync bank as fallback (for offline or local regional tracks like Basinga)
-            val bankLyrics = getVerifiedBankLyrics(track, cleanTitle)
-            if (bankLyrics != null && bankLyrics.hasLines) {
-                lyricsCache[cacheKey] = bankLyrics
-                return@withContext bankLyrics
+            // Stage 9: Offline fallback bank for specific regional local assets that lack internet presence
+            val offlineBank = getVerifiedBankLyrics(track, cleanTitle)
+            if (offlineBank != null && offlineBank.hasLines) {
+                lyricsCache[cacheKey] = offlineBank
+                return@withContext offlineBank
             }
 
-            // 8. If no authentic lyrics exist anywhere, return clean empty state
+            // Stage 10: Clean fallback (No fake acoustic lyrics, clean playback state)
             val fallbackLyrics = getFallbackLyricsForTrack(track)
             lyricsCache[cacheKey] = fallbackLyrics
             fallbackLyrics
@@ -135,18 +164,47 @@ class LyricsService {
         return null
     }
 
-    private fun searchLrclibLyrics(track: Track, query: String): TrackLyrics? {
-        val trimmedQuery = query.trim()
-        if (trimmedQuery.length < 2) return null
+    /**
+     * Structured search using LRCLIB /api/search?track_name=...&artist_name=...
+     */
+    private fun queryLrclibStructured(track: Track, cleanTitle: String, artistName: String?): TrackLyrics? {
+        val trimmedTitle = cleanTitle.trim()
+        if (trimmedTitle.length < 2) return null
 
-        val urlString = "$LRCLIB_SEARCH_URL?q=${encode(trimmedQuery)}"
+        val urlString = if (!artistName.isNullOrBlank()) {
+            "$LRCLIB_SEARCH_URL?track_name=${encode(trimmedTitle)}&artist_name=${encode(artistName)}"
+        } else {
+            "$LRCLIB_SEARCH_URL?track_name=${encode(trimmedTitle)}"
+        }
+
+        return executeLrclibSearch(track, urlString, cleanTitle)
+    }
+
+    /**
+     * Full-text fuzzy query on LRCLIB /api/search?q=...
+     */
+    private fun queryLrclibFuzzy(track: Track, query: String): TrackLyrics? {
+        val trimmed = query.trim()
+        if (trimmed.length < 2) return null
+        val urlString = "$LRCLIB_SEARCH_URL?q=${encode(trimmed)}"
+        return executeLrclibSearch(track, urlString, sanitizeTitle(track.title))
+    }
+
+    /**
+     * Executes LRCLIB candidate evaluation with intelligent scoring based on:
+     * - Synced status (+1000)
+     * - Lyric completeness/length (+300 for full track)
+     * - Artist match tokens (+350)
+     * - Duration delta match (up to +600 for exact track version)
+     * - Exact or partial title match (+350 / +150)
+     */
+    private fun executeLrclibSearch(track: Track, urlString: String, cleanTitle: String): TrackLyrics? {
         val response = makeHttpRequest(urlString) ?: return null
 
         try {
             val jsonArray = JSONArray(response)
             if (jsonArray.length() == 0) return null
 
-            val cleanTitle = sanitizeTitle(track.title)
             val cleanArtist = sanitizeArtist(track.artist).lowercase()
             val targetDurationSec = (track.durationMs / 1000).toInt()
 
@@ -166,6 +224,7 @@ class LyricsService {
                 var score = 0
                 if (synced.isNotBlank()) {
                     score += 1000
+                    // Bonus for full song synced lyrics (not preview snippets)
                     if (synced.length > 800) score += 300
                     else if (synced.length > 400) score += 150
                 }
@@ -174,27 +233,28 @@ class LyricsService {
                 // Artist matching bonus
                 if (cleanArtist.isNotBlank() && artistName.isNotBlank()) {
                     val candidateArtistLower = artistName.lowercase()
-                    val artistTokens = cleanArtist.split(" ", ",", "&", "/", "-").filter { it.length > 2 }
+                    val artistTokens = cleanArtist.split(" ", ",", "&", "/", "-", ";").filter { it.length > 2 }
                     if (artistTokens.any { candidateArtistLower.contains(it) }) {
                         score += 350
                     }
                 }
 
-                // Duration delta scoring
+                // Exact duration match (crucial for choosing album version vs radio edit or remix)
                 if (targetDurationSec > 0 && duration > 0) {
                     val delta = abs(duration - targetDurationSec)
                     when {
-                        delta <= 3 -> score += 400
-                        delta <= 8 -> score += 250
-                        delta <= 15 -> score += 100
-                        delta > 45 -> score -= 300 // Possible different radio edit or mix
+                        delta <= 2 -> score += 600 // Identical track version
+                        delta <= 6 -> score += 350
+                        delta <= 12 -> score += 200
+                        delta <= 20 -> score += 100
+                        delta > 45 -> score -= 400 // Possible different radio edit or mix
                     }
                 }
 
                 // Title exact/close match
                 val cleanItemName = sanitizeTitle(trackName)
                 if (cleanItemName.equals(cleanTitle, ignoreCase = true)) {
-                    score += 300
+                    score += 350
                 } else if (cleanItemName.contains(cleanTitle, ignoreCase = true) || cleanTitle.contains(cleanItemName, ignoreCase = true)) {
                     score += 150
                 }
@@ -251,6 +311,7 @@ class LyricsService {
 
     /**
      * Query JioSaavn lyrics API for official Indian/regional lyrics.
+     * Searches both track id and query text, probing more_info.has_lyrics properly.
      */
     private fun fetchSaavnLyrics(track: Track, cleanTitle: String): TrackLyrics? {
         try {
@@ -259,16 +320,26 @@ class LyricsService {
                 track.id.substringAfterLast("_")
             } else {
                 // Search Saavn to get song ID
-                val searchUrl = "$SAAVN_BASE?__call=search.getResults&_format=json&q=${encode(cleanTitle)}&n=2"
+                val searchUrl = "$SAAVN_BASE?__call=search.getResults&_format=json&q=${encode(cleanTitle)}&n=5"
                 val searchRes = makeHttpRequest(searchUrl) ?: return null
                 val resObj = JSONObject(searchRes)
                 val results = resObj.optJSONArray("results")
-                if (results != null && results.length() > 0) {
-                    val first = results.getJSONObject(0)
-                    if (first.optString("has_lyrics", "false").equals("true", ignoreCase = true)) {
-                        first.optString("id", "")
-                    } else ""
-                } else ""
+                var foundId = ""
+                if (results != null) {
+                    for (k in 0 until results.length()) {
+                        val item = results.optJSONObject(k) ?: continue
+                        val id = item.optString("id", "")
+                        val moreInfo = item.optJSONObject("more_info")
+                        val hasLyrics = moreInfo?.optString("has_lyrics", "") ?: item.optString("has_lyrics", "")
+                        if (hasLyrics.equals("true", ignoreCase = true) && id.isNotBlank()) {
+                            foundId = id
+                            break
+                        } else if (foundId.isBlank() && id.isNotBlank()) {
+                            foundId = id
+                        }
+                    }
+                }
+                foundId
             }
 
             if (saavnId.isNotBlank()) {
@@ -284,6 +355,7 @@ class LyricsService {
                         .replace("&quot;", "\"")
                         .replace("&#039;", "'")
                         .replace("&amp;", "&")
+                        .trim()
 
                     val generatedLines = createSyncedLinesFromPlainText(cleanLyrics, track.durationMs)
                     if (generatedLines.isNotEmpty()) {
@@ -306,22 +378,37 @@ class LyricsService {
     }
 
     /**
-     * Parses standard LRC format strings:
-     * e.g. [00:14.32] Never gonna give you up
+     * Parses standard LRC format strings with support for:
+     * - [offset: +/-ms] tags
+     * - Multi-timestamp per line [01:10.50][02:20.50] text
+     * - Standard [mm:ss.xx] lines
      */
     fun parseLrc(lrcText: String): List<LyricLine> {
         val lines = mutableListOf<LyricLine>()
-        val lrcPattern = Pattern.compile("\\[(\\d{1,2}):(\\d{2})(?:[.:](\\d{1,3}))?\\](.*)")
+        var offsetMs = 0L
+
+        val offsetPattern = Pattern.compile("\\[offset:\\s*([+-]?\\d+)\\]", Pattern.CASE_INSENSITIVE)
+        val timeTagPattern = Pattern.compile("\\[(\\d{1,2}):(\\d{2})(?:[.:](\\d{1,3}))?\\]")
 
         lrcText.lines().forEach { rawLine ->
             val trimmed = rawLine.trim()
             if (trimmed.isBlank()) return@forEach
 
-            val matcher = lrcPattern.matcher(trimmed)
-            if (matcher.find()) {
-                val min = matcher.group(1)?.toLongOrNull() ?: 0L
-                val sec = matcher.group(2)?.toLongOrNull() ?: 0L
-                val millisRaw = matcher.group(3)
+            val offsetMatcher = offsetPattern.matcher(trimmed)
+            if (offsetMatcher.find()) {
+                offsetMs = offsetMatcher.group(1)?.toLongOrNull() ?: 0L
+                return@forEach
+            }
+
+            // Extract all timestamps from this line
+            val timeMatcher = timeTagPattern.matcher(trimmed)
+            val timestamps = mutableListOf<Long>()
+            var lastEnd = 0
+
+            while (timeMatcher.find()) {
+                val min = timeMatcher.group(1)?.toLongOrNull() ?: 0L
+                val sec = timeMatcher.group(2)?.toLongOrNull() ?: 0L
+                val millisRaw = timeMatcher.group(3)
                 val millis = when {
                     millisRaw == null -> 0L
                     millisRaw.length == 1 -> millisRaw.toLong() * 100
@@ -330,11 +417,17 @@ class LyricsService {
                 }
 
                 val timestampMs = (min * 60 * 1000) + (sec * 1000) + millis
-                val content = matcher.group(4)?.trim() ?: ""
+                timestamps.add(timestampMs)
+                lastEnd = timeMatcher.end()
+            }
 
-                // Ignore metadata lines like [by:...] or blank timestamps
+            if (timestamps.isNotEmpty()) {
+                val content = trimmed.substring(lastEnd).trim()
                 if (content.isNotBlank() && !content.startsWith("[") && !content.startsWith("{")) {
-                    lines.add(LyricLine(timestampMs = timestampMs, text = content))
+                    for (ts in timestamps) {
+                        val adjustedMs = (ts + offsetMs).coerceAtLeast(0L)
+                        lines.add(LyricLine(timestampMs = adjustedMs, text = content))
+                    }
                 }
             }
         }
@@ -345,7 +438,7 @@ class LyricsService {
     /**
      * Transforms plain unsynced lyric text into dynamically cadenced time-stamped lines.
      * Uses syllable/word density weighting, musical intro buffering, and stanza breath pauses
-     * rather than naive equal division.
+     * distributed proportionally across the entire duration of the song.
      */
     private fun createSyncedLinesFromPlainText(plainText: String, durationMs: Long): List<LyricLine> {
         val rawLines = plainText.lines()
@@ -362,7 +455,7 @@ class LyricsService {
         if (rawLines.isEmpty()) return emptyList()
 
         val validDuration = durationMs.coerceAtLeast(60000L)
-        // Authentic musical intro offset (first vocal line typically enters at 10-18s)
+        // Authentic musical intro offset (first vocal line enters around 10-14s)
         val introDelayMs = 12000L
         val outroBufferMs = 15000L
         val availableSingingWindowMs = (validDuration - introDelayMs - outroBufferMs).coerceAtLeast(20000L)
@@ -415,31 +508,80 @@ class LyricsService {
     }
 
     /**
-     * Sanitizes track title: strips HTML entities, movie tags, language indicators, and noise.
+     * Sanitizes track title:
+     * - Strips file extensions (.mp3, .flac, .m4a, .wav)
+     * - Strips track numbers ("01 - ", "02. ")
+     * - Extracts song name if formatted as "Artist - Title"
+     * - Strips web download watermarks ([PagalWorld], [Songs.pk], (320kbps))
+     * - Strips media suffixes ((Official Video), (Lyric Video), [Visualizer])
      */
     fun sanitizeTitle(title: String): String {
-        return title
-            .replace("&quot;", "")
+        var clean = title
+            .replace("&quot;", "\"")
             .replace("&#039;", "'")
             .replace("&amp;", "&")
-            .replace("&lt;", "")
-            .replace("&gt;", "")
+            .replace("&lt;", "<")
+            .replace("&gt;", ">")
             .replace("&nbsp;", " ")
+
+        // 1. Remove file extensions (e.g. .mp3, .flac, .m4a, .wav, .aac, .ogg, .opus)
+        clean = clean.replace(Regex("\\.(mp3|m4a|flac|wav|aac|ogg|opus)$", RegexOption.IGNORE_CASE), "")
+
+        // 2. Remove leading track numbering (e.g. "01 - ", "01. ", "01 ", "1- ", "01_")
+        clean = clean.replace(Regex("^[0-9]{1,3}[.\\s_\\-]+"), "")
+
+        // 3. If title is formatted as "Artist - Title", extract title part
+        if (clean.contains(" - ") && !clean.contains("(") && !clean.contains("[")) {
+            val parts = clean.split(" - ")
+            if (parts.size == 2 && parts[0].trim().length < 25 && parts[1].trim().isNotBlank()) {
+                clean = parts[1].trim()
+            }
+        }
+
+        // 4. Remove common web watermarks and audio bitrate tags
+        clean = clean
+            .replace(Regex("\\[(PagalWorld|Songs\\.pk|NaaSongs|Pendujatt|DjPunjab|Webmusic)[^\\]]*\\]", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("\\((?:320kbps|128kbps|256kbps|Lossless|HQ|HD)\\)", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("\\[(?:320kbps|128kbps|256kbps|Lossless|HQ|HD)\\]", RegexOption.IGNORE_CASE), "")
+
+        // 5. Remove media and movie descriptors
+        clean = clean
             .replace(Regex("\\(From [^)]*\\)", RegexOption.IGNORE_CASE), "")
             .replace(Regex("\\[From [^\\]]*\\]", RegexOption.IGNORE_CASE), "")
             .replace(Regex("\\[[^\\]]*\\]"), "")
-            .replace(Regex("\\((?:Telugu|Hindi|Tamil|Kannada|Malayalam|Punjabi|Bhojpuri|Audio|Song|Original|Music|Video|Lyrics|Remix|Live|New Version|Acoustic|Slowed|Reverb|Lofi|Cover|OST)[^)]*\\)", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("\\(Official[^)]*\\)", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("-\\s*(?:Telugu|Hindi|Tamil|Kannada|Malayalam|Punjabi|New Version|Remix|Official).*", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("\\((?:Official|Lyrical|Lyric|Full|Video|Audio|Song|Music|Original|Remix|Live|New Version|Acoustic|Slowed|Reverb|Lofi|Cover|OST|4K|Visualizer)[^)]*\\)", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("-\\s*(?:Telugu|Hindi|Tamil|Kannada|Malayalam|Punjabi|New Version|Remix|Official|Lyrical|Audio).*", RegexOption.IGNORE_CASE), "")
             .replace(Regex("\\|.*"), "") // e.g. "| Coke Studio Bharat"
-            .replace(Regex("feat\\..*", RegexOption.IGNORE_CASE), "")
-            .replace(Regex("ft\\..*", RegexOption.IGNORE_CASE), "")
+            .replace(Regex("\\b(feat\\.|ft\\.|featuring)\\b.*", RegexOption.IGNORE_CASE), "")
+
+        return clean.trim()
+    }
+
+    /**
+     * Extracts individual artist tokens from multi-artist strings (comma, ampersand, slash, semicolon).
+     * e.g. "Pritam, Arijit Singh, Amitabh Bhattacharya" -> ["Pritam", "Arijit Singh", "Amitabh Bhattacharya"]
+     */
+    fun getArtistCandidates(artist: String): List<String> {
+        val candidates = mutableListOf<String>()
+        val clean = artist
+            .replace(Regex("\\b(feat\\.|ft\\.|with|featuring|presents|prod\\.)\\b.*", RegexOption.IGNORE_CASE), "")
             .trim()
+
+        val tokens = clean.split(",", "&", "/", ";").map { it.trim() }.filter { it.length >= 2 }
+        for (token in tokens) {
+            val sanitized = token.replace(Regex("(?i)singer|composer|music|official"), "").trim()
+            if (sanitized.isNotBlank() && !candidates.contains(sanitized)) {
+                candidates.add(sanitized)
+            }
+        }
+        if (candidates.isEmpty() && artist.isNotBlank() && !artist.equals("Unknown Artist", ignoreCase = true)) {
+            candidates.add(artist.trim())
+        }
+        return candidates
     }
 
     /**
      * Extracts the primary title before any hyphen or secondary descriptor.
-     * e.g. "Tera Mera Rishta - New Version" -> "Tera Mera Rishta"
      */
     fun extractCoreTitle(title: String): String {
         val beforeDash = title.split("-").firstOrNull()?.trim() ?: title
@@ -448,7 +590,7 @@ class LyricsService {
     }
 
     /**
-     * Extracts the primary lead singer/artist name.
+     * Extracts primary artist name string.
      */
     fun sanitizeArtist(artist: String): String {
         val s1 = artist.split(",").firstOrNull()?.trim() ?: artist
@@ -468,7 +610,7 @@ class LyricsService {
     }
 
     /**
-     * Verified built-in karaoke sync bank for top hits, local tracks, or newly released songs.
+     * Offline fallback bank for regional folk/local tracks that have no digital presence on public APIs.
      */
     private fun getVerifiedBankLyrics(track: Track, cleanTitle: String): TrackLyrics? {
         val titleLower = cleanTitle.lowercase()
@@ -518,17 +660,6 @@ class LyricsService {
                 [00:55.11] ఏష నాగుల కట్ట మీద యేసిన ఉయ్యాల
                 [00:57.52] మనం ఊగుదమే బాల
                 [00:59.42] ఏష నాగుల కట్ట మీద యేసిన ఉయ్యాల మనం ఊగుదమే బాల
-                [01:03.45] ఏష నాగుల కట్ట మీద ఏష నాగుల కట్ట మీద
-                [01:07.85] హో ఏష నాగుల కట్ట మీద
-                [01:09.39] ఏష నాగుల కట్ట మీద యేసిన ఉయ్యాల మనం ఊగుదమే బాల
-                [01:46.14] మొన్నా నువ్వు సెమటలు తుడుసుకున్న నా వాయిల్ చీర
-                [01:49.47] సింగులే సెక్కంగ చిక్కున పడదా
-                [01:52.25] నిన్న నీ వేలను తలుసుకొని నా జబ్బల రైక
-                [01:54.84] హుక్కులే ఉట్టుట్టిగ తెగిపోయినరో
-                [01:57.78] మొన్న గుస గుస ముచ్చటంత గుర్తుకొస్తెరా
-                [02:00.27] చెవి సత్తుకమ్మ మత్తుగమ్మి మొత్తుకుందిరా
-                [02:03.76] నువ్వే పొర్లి పోయిన బొంతనింక సదురలేదురా
-                [02:06.26] ఇయ్యాల రాకపోతే పక్క మీద నేను సత్తరా!
             """.trimIndent()
 
             titleLower.contains("aaya sher") -> """
