@@ -45,6 +45,11 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.FormatQuote
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Brush
@@ -78,6 +83,7 @@ fun PixelSyncedLyricsView(
     val listState = rememberLazyListState()
 
     val lines = lyrics?.lines ?: emptyList()
+    var selectedQuoteText by remember { mutableStateOf<String?>(null) }
 
     // Determine the current line by timestamp
     val rawIndex = remember(currentPositionMs, lines) {
@@ -196,6 +202,25 @@ fun PixelSyncedLyricsView(
                         modifier = Modifier.padding(end = 8.dp)
                     )
 
+                    // Quick Quote Card button
+                    IconButton(
+                        onClick = {
+                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                            val currentText = if (rawIndex in lines.indices) lines[rawIndex].text else lines.firstOrNull()?.text
+                            if (!currentText.isNullOrBlank()) {
+                                selectedQuoteText = currentText
+                            }
+                        },
+                        modifier = Modifier.size(34.dp)
+                    ) {
+                        Icon(
+                            imageVector = Icons.Default.FormatQuote,
+                            contentDescription = "Quote Current Lyric",
+                            tint = MonochromeWhite,
+                            modifier = Modifier.size(20.dp)
+                        )
+                    }
+
                     // Quick Toggle button to switch back to Album Artwork
                     IconButton(
                         onClick = {
@@ -306,12 +331,17 @@ fun PixelSyncedLyricsView(
                                     if (isCurrent) MonochromeSurfaceContainer.copy(alpha = 0.55f)
                                     else Color.Transparent
                                 )
-                                .clickable(
-                                    interactionSource = remember { MutableInteractionSource() },
-                                    indication = null
-                                ) {
-                                    haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                                    onSeekToTimestamp(line.timestampMs)
+                                .pointerInput(line.timestampMs, line.text) {
+                                    detectTapGestures(
+                                        onTap = {
+                                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
+                                            onSeekToTimestamp(line.timestampMs)
+                                        },
+                                        onLongPress = {
+                                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                                            selectedQuoteText = line.text
+                                        }
+                                    )
                                 }
                                 .padding(horizontal = 12.dp, vertical = 8.dp)
                         ) {
@@ -391,5 +421,15 @@ fun PixelSyncedLyricsView(
                     )
                 )
         )
+
+        // Pixel Lyric Quote Card Dialog
+        selectedQuoteText?.let { quote ->
+            PixelLyricQuoteDialog(
+                lyricText = quote,
+                trackTitle = lyrics?.title ?: "Current Track",
+                trackArtist = lyrics?.artist ?: "Unknown Artist",
+                onDismiss = { selectedQuoteText = null }
+            )
+        }
     }
 }
