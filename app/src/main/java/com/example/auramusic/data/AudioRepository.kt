@@ -92,7 +92,8 @@ class AudioRepository(private val context: Context) {
             MediaStore.Audio.Media.ARTIST,
             MediaStore.Audio.Media.ALBUM,
             MediaStore.Audio.Media.DURATION,
-            MediaStore.Audio.Media.ALBUM_ID
+            MediaStore.Audio.Media.ALBUM_ID,
+            MediaStore.Audio.Media.DATA
         )
 
         val selection = "${MediaStore.Audio.Media.IS_MUSIC} != 0"
@@ -107,6 +108,7 @@ class AudioRepository(private val context: Context) {
                 val albumColumn = it.getColumnIndexOrThrow(MediaStore.Audio.Media.ALBUM)
                 val durationColumn = it.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
                 val albumIdColumn = it.getColumnIndex(MediaStore.Audio.Media.ALBUM_ID)
+                val dataColumn = it.getColumnIndex(MediaStore.Audio.Media.DATA)
 
                 while (it.moveToNext()) {
                     val id = it.getLong(idColumn)
@@ -115,6 +117,7 @@ class AudioRepository(private val context: Context) {
                     val album = it.getString(albumColumn) ?: "Unknown Album"
                     val duration = it.getLong(durationColumn)
                     val albumId = if (albumIdColumn >= 0) it.getLong(albumIdColumn) else -1L
+                    val filePath = if (dataColumn >= 0) it.getString(dataColumn) else null
 
                     val fallbackArt = colorfulFallbacks[(id.hashCode().absoluteValue) % colorfulFallbacks.size]
                     val artUri = if (albumId >= 0) {
@@ -135,7 +138,8 @@ class AudioRepository(private val context: Context) {
                             isLossless = true,
                             source = StreamingSource.LOCAL_STORAGE,
                             qualityBadge = "LOCAL FLAC",
-                            category = "Device Library"
+                            category = "Device Library",
+                            localFilePath = filePath
                         )
                         deviceTracks.add(track)
                     }
