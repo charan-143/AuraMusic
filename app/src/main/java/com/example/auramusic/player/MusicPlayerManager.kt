@@ -49,6 +49,7 @@ class MusicPlayerManager(private val context: Context) {
 
     private val scope = CoroutineScope(Dispatchers.Main + Job())
     private var positionTickerJob: Job? = null
+    private var hasRecordedCurrentPlay = false
 
     private val _playerState = MutableStateFlow(PlayerState())
     val playerState: StateFlow<PlayerState> = _playerState.asStateFlow()
@@ -58,6 +59,8 @@ class MusicPlayerManager(private val context: Context) {
 
     val cacheManager by lazy { AdaptiveAudioCacheManager(context) }
     val equalizerManager by lazy { EqualizerManager(context) }
+    val offlineDownloadManager by lazy { com.example.auramusic.cache.OfflineDownloadManager.getInstance(context) }
+    val favoritesManager by lazy { com.example.auramusic.data.FavoritesManager.getInstance(context) }
 
     val exoPlayer: ExoPlayer by lazy {
         val mediaSourceFactory = DefaultMediaSourceFactory(cacheManager.cacheDataSourceFactory)
@@ -260,6 +263,10 @@ class MusicPlayerManager(private val context: Context) {
             durationMs = track.durationMs
         )
 
+        hasRecordedCurrentPlay = false
+        try { exoPlayer.volume = 1.0f } catch (e: Exception) {}
+        favoritesManager.recordRecentlyPlayed(track.id)
+
         // Trigger background preloading of upcoming tracks for seamless traveling
         cacheManager.prefetchUpcomingTracks(queue, index)
 
@@ -268,7 +275,15 @@ class MusicPlayerManager(private val context: Context) {
             equalizerManager.attachToSession(exoPlayer.audioSessionId)
         }
 
-        if (track.audioUrl.isNotBlank()) {
+        val localPath = offlineDownloadManager.getLocalPath(track.id) ?: track.localFilePath
+        val localFile = if (!localPath.isNullOrBlank()) java.io.File(localPath) else null
+        val effectiveUri = if (localFile != null && localFile.exists()) {
+            Uri.fromFile(localFile)
+        } else if (track.audioUrl.isNotBlank()) {
+            Uri.parse(track.audioUrl)
+        } else null
+
+        if (effectiveUri != null) {
             try {
                 exoPlayer.stop()
                 exoPlayer.clearMediaItems()
@@ -280,7 +295,7 @@ class MusicPlayerManager(private val context: Context) {
                     .build()
 
                 val mediaItem = MediaItem.Builder()
-                    .setUri(Uri.parse(track.audioUrl))
+                    .setUri(effectiveUri)
                     .setMediaId(track.id)
                     .setMediaMetadata(mediaMetadata)
                     .build()
@@ -298,6 +313,25 @@ class MusicPlayerManager(private val context: Context) {
             // Simulated local playback progression with exact audio timings
             startTicker()
             startMediaPlaybackService()
+        }
+    }
+
+    fun setPlaybackSpeed(speed: Float) {
+        val clampedSpeed = speed.coerceIn(0.5f, 2.0f)
+        try {
+            exoPlayer.playbackParameters = androidx.media3.common.PlaybackParameters(clampedSpeed)
+        } catch (e: Exception) {
+            // safe fallback
+        }
+        _playerState.update { it.copy(playbackSpeed = clampedSpeed) }
+    }
+
+    fun setCrossfade(enabled: Boolean, durationSec: Int = 3) {
+        _playerState.update {
+            it.copy(
+                isCrossfadeEnabled = enabled,
+                crossfadeDurationSec = durationSec.coerceIn(1, 12)
+            )
         }
     }
 
@@ -477,11 +511,6 @@ class MusicPlayerManager(private val context: Context) {
 
     fun updateNetworkStatus(statusText: String) {
         _playerState.update { it.copy(networkStatusText = statusText) }
-    }
-
-    fun setPlaybackSpeed(speed: Float) {
-        exoPlayer.setPlaybackSpeed(speed)
-        _playerState.update { it.copy(playbackSpeed = speed) }
     }
 
     fun getAudioSessionId(): Int {
@@ -675,6 +704,27 @@ class MusicPlayerManager(private val context: Context) {
                             durationMs = duration,
                             bufferedPositionMs = buffered
                         )
+
+                        // Play count tracking (after 15 seconds)
+                        if (!hasRecordedCurrentPlay && current >= 15000L && state.currentTrack != null) {
+                            hasRecordedCurrentPlay = true
+                            favoritesManager.recordPlay(state.currentTrack.id)
+                        }
+
+                        // DJ Crossfade smooth volume automation
+                        if (state.isCrossfadeEnabled && duration > 10000L) {
+                            val fadeMs = state.crossfadeDurationSec * 1000L
+                            val remainingMs = duration - current
+                            if (remainingMs in 0..fadeMs) {
+                                val fadeRatio = (remainingMs.toFloat() / fadeMs.toFloat()).coerceIn(0.05f, 1.0f)
+                                exoPlayer.volume = fadeRatio
+                            } else if (current in 0..1200L) {
+                                val fadeInRatio = (current.toFloat() / 1200f).coerceIn(0.15f, 1.0f)
+                                exoPlayer.volume = fadeInRatio
+                            } else {
+                                if (exoPlayer.volume < 1.0f) exoPlayer.volume = 1.0f
+                            }
+                        }
                     } else {
                         // Simulated progression
                         val currentProg = _playbackProgress.value
@@ -682,6 +732,12 @@ class MusicPlayerManager(private val context: Context) {
                         val newPos = (currentProg.currentPositionMs + (250 * speedFactor).toLong())
                         val simDuration = state.durationMs.coerceAtLeast(currentProg.durationMs)
                         val simulatedBuffer = (newPos + 60000L).coerceAtMost(simDuration)
+
+                        if (!hasRecordedCurrentPlay && newPos >= 15000L && state.currentTrack != null) {
+                            hasRecordedCurrentPlay = true
+                            favoritesManager.recordPlay(state.currentTrack.id)
+                        }
+
                         if (newPos >= simDuration && simDuration > 0) {
                             if (state.isRepeatOne) {
                                 _playbackProgress.value = PlaybackProgress(currentPositionMs = 0L, durationMs = simDuration)

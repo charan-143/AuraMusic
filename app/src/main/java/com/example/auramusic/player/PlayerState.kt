@@ -63,7 +63,9 @@ data class PlayerState(
     val autoQualitySwitchNote: String = "Auto: 24-bit FLAC active",
     val isSignalFluctuating: Boolean = false,
     val isEqualizerEnabled: Boolean = true,
-    val equalizerProfileBadge: String = "AI ✦ CINEMATIC"
+    val equalizerProfileBadge: String = "AI ✦ CINEMATIC",
+    val isCrossfadeEnabled: Boolean = true,
+    val crossfadeDurationSec: Int = 3
 ) {
     val progress: Float
         get() = if (durationMs > 0) (currentPositionMs.toFloat() / durationMs.toFloat()).coerceIn(0f, 1f) else 0f
