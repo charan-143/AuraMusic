@@ -82,22 +82,83 @@ class OfflineDownloadManager private constructor(private val context: Context) {
         val job = scope.launch {
             _downloadStates.update { it + (track.id to DownloadState.Downloading(0f)) }
 
+            val sanitizedId = track.id.replace(Regex("[^a-zA-Z0-9_-]"), "_")
+
+            // 1. If content:// URI (from device storage)
+            if (track.audioUrl.startsWith("content://") || track.audioUrl.startsWith("file://")) {
+                try {
+                    val targetFile = File(downloadDir, "offline_${sanitizedId}.mp3")
+                    val uri = android.net.Uri.parse(track.audioUrl)
+                    val input = if (track.audioUrl.startsWith("content://")) {
+                        context.contentResolver.openInputStream(uri)
+                    } else {
+                        java.io.FileInputStream(File(uri.path ?: track.audioUrl))
+                    }
+
+                    input?.use { inStream ->
+                        FileOutputStream(targetFile).use { outStream ->
+                            inStream.copyTo(outStream)
+                        }
+                    }
+
+                    val completedTrack = track.copy(
+                        isCachedOffline = true,
+                        localFilePath = targetFile.absolutePath,
+                        qualityBadge = "OFFLINE"
+                    )
+
+                    _downloadStates.update { it + (track.id to DownloadState.Downloaded(targetFile.absolutePath)) }
+                    _downloadedTracks.update { current ->
+                        val existing = current.filterNot { it.id == track.id }
+                        existing + completedTrack
+                    }
+
+                    persistDownloads()
+                    Log.i(TAG, "Successfully cached local track: ${track.title} to ${targetFile.absolutePath}")
+                } catch (e: Exception) {
+                    Log.e(TAG, "Local caching failed for ${track.title}", e)
+                    _downloadStates.update { it + (track.id to DownloadState.Failed(e.message ?: "Caching failed")) }
+                } finally {
+                    activeDownloadJobs.remove(track.id)
+                }
+                return@launch
+            }
+
+            // 2. Online HTTP/HTTPS stream download with redirect follow
             var connection: HttpURLConnection? = null
             var inputStream: InputStream? = null
             var outputStream: FileOutputStream? = null
 
             try {
-                val sanitizedId = track.id.replace(Regex("[^a-zA-Z0-9_-]"), "_")
                 val targetFile = File(downloadDir, "offline_${sanitizedId}.m4a")
 
-                val url = URL(track.audioUrl)
-                connection = (url.openConnection() as HttpURLConnection).apply {
-                    connectTimeout = 15000
-                    readTimeout = 30000
-                    instanceFollowRedirects = true
-                    setRequestProperty("User-Agent", "AuraMusic/2.4.0 (Android; Material 3 Expressive)")
+                var currentUrl = track.audioUrl
+                var redirects = 0
+                var conn: HttpURLConnection? = null
+
+                while (redirects < 5) {
+                    val url = URL(currentUrl)
+                    conn = (url.openConnection() as HttpURLConnection).apply {
+                        connectTimeout = 15000
+                        readTimeout = 30000
+                        instanceFollowRedirects = true
+                        setRequestProperty("User-Agent", "AuraMusic/2.4.0 (Android; Material 3 Expressive)")
+                    }
+
+                    val code = conn.responseCode
+                    if (code in 301..308) {
+                        val location = conn.getHeaderField("Location")
+                        conn.disconnect()
+                        if (!location.isNullOrBlank()) {
+                            currentUrl = if (location.startsWith("http")) location else URL(url, location).toString()
+                            redirects++
+                            continue
+                        }
+                    }
+                    break
                 }
 
+                connection = conn ?: throw Exception("Failed to open connection")
                 if (connection.responseCode != HttpURLConnection.HTTP_OK) {
                     throw Exception("HTTP ${connection.responseCode} while downloading track")
                 }
