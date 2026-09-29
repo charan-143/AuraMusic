@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.SharedPreferences
 import android.media.audiofx.BassBoost
 import android.media.audiofx.Equalizer
+import android.media.audiofx.LoudnessEnhancer
 import android.media.audiofx.Virtualizer
 import android.util.Log
 import com.example.auramusic.model.Track
@@ -33,6 +34,7 @@ class EqualizerManager(private val context: Context) {
     private var hardwareEqualizer: Equalizer? = null
     private var hardwareBassBoost: BassBoost? = null
     private var hardwareVirtualizer: Virtualizer? = null
+    private var hardwareLoudnessEnhancer: LoudnessEnhancer? = null
     private var currentAudioSessionId: Int = 0
 
     private val _state = MutableStateFlow(loadInitialState())
@@ -129,6 +131,16 @@ class EqualizerManager(private val context: Context) {
                 }
             } catch (e: Exception) {
                 Log.w(TAG, "Virtualizer not supported on this session", e)
+            }
+
+            // Hardware LoudnessEnhancer (LUFS broadcast volume normalization)
+            try {
+                val le = LoudnessEnhancer(audioSessionId)
+                le.setTargetGain(180) // Target gain +1.8dB for broadcast dynamic headroom
+                le.enabled = true
+                hardwareLoudnessEnhancer = le
+            } catch (e: Exception) {
+                Log.w(TAG, "LoudnessEnhancer not supported on this session", e)
             }
 
             _state.update {
@@ -406,6 +418,13 @@ class EqualizerManager(private val context: Context) {
             Log.w(TAG, "Error releasing Virtualizer", e)
         }
         hardwareVirtualizer = null
+
+        try {
+            hardwareLoudnessEnhancer?.release()
+        } catch (e: Exception) {
+            Log.w(TAG, "Error releasing LoudnessEnhancer", e)
+        }
+        hardwareLoudnessEnhancer = null
     }
 }
 

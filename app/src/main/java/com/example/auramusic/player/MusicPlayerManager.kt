@@ -302,6 +302,23 @@ class MusicPlayerManager(private val context: Context) {
 
                 exoPlayer.setMediaItem(mediaItem)
                 exoPlayer.prepare()
+                try {
+                    exoPlayer.playbackParameters = androidx.media3.common.PlaybackParameters(_playerState.value.playbackSpeed)
+                } catch (ignored: Exception) {}
+
+                if (_playerState.value.isCrossfadeEnabled) {
+                    exoPlayer.volume = 0.25f
+                    scope.launch {
+                        val steps = 6
+                        for (i in 2..steps) {
+                            delay(50)
+                            try { exoPlayer.volume = (i.toFloat() / steps.toFloat()).coerceIn(0.25f, 1.0f) } catch (ignored: Exception) {}
+                        }
+                    }
+                } else {
+                    try { exoPlayer.volume = 1.0f } catch (ignored: Exception) {}
+                }
+
                 exoPlayer.play()
                 startMediaPlaybackService()
             } catch (e: Exception) {
@@ -391,7 +408,20 @@ class MusicPlayerManager(private val context: Context) {
         } else {
             (state.currentIndex + 1) % state.queue.size
         }
-        playTrack(state.queue[nextIndex])
+        val nextTrack = state.queue[nextIndex]
+
+        if (state.isCrossfadeEnabled && exoPlayer.isPlaying) {
+            scope.launch {
+                val steps = 5
+                for (i in (steps - 1) downTo 1) {
+                    try { exoPlayer.volume = (i.toFloat() / steps.toFloat()) } catch (ignored: Exception) {}
+                    delay(40)
+                }
+                playTrack(nextTrack)
+            }
+        } else {
+            playTrack(nextTrack)
+        }
     }
 
     fun skipPrevious() {
@@ -406,7 +436,20 @@ class MusicPlayerManager(private val context: Context) {
         }
 
         val prevIndex = if (state.currentIndex > 0) state.currentIndex - 1 else state.queue.lastIndex
-        playTrack(state.queue[prevIndex])
+        val prevTrack = state.queue[prevIndex]
+
+        if (state.isCrossfadeEnabled && exoPlayer.isPlaying) {
+            scope.launch {
+                val steps = 5
+                for (i in (steps - 1) downTo 1) {
+                    try { exoPlayer.volume = (i.toFloat() / steps.toFloat()) } catch (ignored: Exception) {}
+                    delay(40)
+                }
+                playTrack(prevTrack)
+            }
+        } else {
+            playTrack(prevTrack)
+        }
     }
 
     fun toggleShuffle() {
