@@ -10,6 +10,7 @@ import com.example.auramusic.model.Album
 import com.example.auramusic.model.AudioBitrateMode
 import com.example.auramusic.model.Playlist
 import com.example.auramusic.model.RecommendationSection
+import com.example.auramusic.model.StreamingSource
 import com.example.auramusic.model.Track
 import com.example.auramusic.network.NetworkQualityObserver
 import com.example.auramusic.network.OnlineMusicSearchService
@@ -437,23 +438,29 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         recommendationJob?.cancel()
         recommendationJob = viewModelScope.launch(Dispatchers.Default) {
             val mood = _selectedCategory.value
-            val tracksPool = _allTracks.value
-            val albumsPool = _allAlbums.value
+            val onlineTracksOnly = _allTracks.value.filter { 
+                !it.isLocal && !it.isCachedOffline && it.source != StreamingSource.LOCAL_STORAGE 
+            }
+            val onlineAlbumsOnly = _allAlbums.value.filter { 
+                it.source != StreamingSource.LOCAL_STORAGE 
+            }
+            val effectiveActiveTrack = if (track?.isLocal == true || track?.isCachedOffline == true || track?.source == StreamingSource.LOCAL_STORAGE) null else track
+
             val rawSections = recommendationEngine.getOnlineRecommendationSections(
-                activeTrack = track,
-                providedTracks = tracksPool,
-                providedAlbums = albumsPool
+                activeTrack = effectiveActiveTrack,
+                providedTracks = onlineTracksOnly,
+                providedAlbums = onlineAlbumsOnly
             )
 
             val updatedSections = if (mood.isNotBlank() && mood != "All Tracks" && mood != "All Recommendations" && mood != "All" && mood != "My Playlists" && mood != "Albums") {
-                val moodTracks = recommendationEngine.getTracksForMoodChip(mood, tracksPool)
+                val moodTracks = recommendationEngine.getTracksForMoodChip(mood, onlineTracksOnly)
                 if (moodTracks.isNotEmpty()) {
                     listOf(
                         RecommendationSection(
                             id = "rec_mood_${mood.lowercase().replace(" ", "_")}",
                             title = "$mood Curation",
                             subtitle = "Harmonically tuned algorithmic flow matching your $mood vibe",
-                            source = track?.source ?: com.example.auramusic.model.StreamingSource.SPOTIFY,
+                            source = effectiveActiveTrack?.source ?: com.example.auramusic.model.StreamingSource.SPOTIFY,
                             albums = emptyList(),
                             tracks = moodTracks.take(8)
                         )

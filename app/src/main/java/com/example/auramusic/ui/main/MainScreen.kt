@@ -260,7 +260,7 @@ fun MainScreen(
                             PixelNavTab.HOME -> {
                         val currentTrack = playerState.currentTrack
 
-                        if (currentTrack != null) {
+                        if (currentTrack != null && !currentTrack.isLocal && !currentTrack.isCachedOffline && currentTrack.source != com.example.auramusic.model.StreamingSource.LOCAL_STORAGE) {
                             // Currently Playing / Selected Hero Card
                             item {
                                 Box(

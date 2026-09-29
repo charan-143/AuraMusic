@@ -261,16 +261,16 @@ class RecommendationEngine(
         providedAlbums: List<Album> = emptyList()
     ): List<RecommendationSection> {
         val allAlbums = when {
-            providedAlbums.isNotEmpty() -> providedAlbums
-            audioRepository.getAllAlbums().isNotEmpty() -> audioRepository.getAllAlbums()
+            providedAlbums.isNotEmpty() -> providedAlbums.filter { it.source != StreamingSource.LOCAL_STORAGE }
+            audioRepository.getAllAlbums().isNotEmpty() -> audioRepository.getAllAlbums().filter { it.source != StreamingSource.LOCAL_STORAGE }
             else -> curatedFallbackAlbums
-        }
+        }.ifEmpty { curatedFallbackAlbums }
 
         val allTracks = when {
-            providedTracks.isNotEmpty() -> providedTracks
-            audioRepository.getMultiSourceTracks().isNotEmpty() -> audioRepository.getMultiSourceTracks()
+            providedTracks.isNotEmpty() -> providedTracks.filter { !it.isLocal && !it.isCachedOffline && it.source != StreamingSource.LOCAL_STORAGE }
+            audioRepository.getMultiSourceTracks().isNotEmpty() -> audioRepository.getMultiSourceTracks().filter { !it.isLocal && !it.isCachedOffline && it.source != StreamingSource.LOCAL_STORAGE }
             else -> curatedFallbackTracks
-        }
+        }.ifEmpty { curatedFallbackTracks }
 
         val sections = mutableListOf<RecommendationSection>()
 
@@ -459,8 +459,8 @@ class RecommendationEngine(
      * Finds related songs and albums for a specific track.
      */
     fun getRelatedContent(track: Track): Pair<List<Album>, List<Track>> {
-        val allAlbums = audioRepository.getAllAlbums().ifEmpty { curatedFallbackAlbums }
-        val allTracks = audioRepository.getMultiSourceTracks().ifEmpty { curatedFallbackTracks }
+        val allAlbums = audioRepository.getAllAlbums().filter { it.source != StreamingSource.LOCAL_STORAGE }.ifEmpty { curatedFallbackAlbums }
+        val allTracks = audioRepository.getMultiSourceTracks().filter { !it.isLocal && !it.isCachedOffline && it.source != StreamingSource.LOCAL_STORAGE }.ifEmpty { curatedFallbackTracks }
 
         val relatedAlbums = allAlbums.filter {
             it.source == track.source || it.artist.contains(track.artist, ignoreCase = true)
@@ -479,7 +479,7 @@ class RecommendationEngine(
      * Returns tracks matching a quick vibe/mood chip (e.g. Focus, Lofi, Cinematic, Rock, Devotional).
      */
     fun getTracksForMoodChip(chipName: String, pool: List<Track>): List<Track> {
-        val allTracks = pool.ifEmpty { curatedFallbackTracks }
+        val allTracks = pool.filter { !it.isLocal && !it.isCachedOffline && it.source != StreamingSource.LOCAL_STORAGE }.ifEmpty { curatedFallbackTracks }
         val targetVibe = MusicVibe.entries.firstOrNull { it.chipName.equals(chipName, ignoreCase = true) }
 
         return if (targetVibe != null) {
