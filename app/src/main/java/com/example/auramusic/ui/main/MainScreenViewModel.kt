@@ -481,7 +481,11 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
      */
     fun startTrackRadio(seedTrack: Track) {
         viewModelScope.launch(Dispatchers.Default) {
-            val pool = _allTracks.value.ifEmpty { audioRepository.getMultiSourceTracks() }
+            val pool = _allTracks.value
+                .filter { !it.isLocal && !it.isCachedOffline && it.source != StreamingSource.LOCAL_STORAGE }
+                .ifEmpty { 
+                    audioRepository.getMultiSourceTracks().filter { !it.isLocal && !it.isCachedOffline && it.source != StreamingSource.LOCAL_STORAGE }
+                }
             val radioQueue = recommendationEngine.generateRadioQueue(seedTrack, pool, count = 15)
             withContext(Dispatchers.Main) {
                 playerManager.setQueue(radioQueue, 0)
@@ -494,9 +498,14 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     fun playTrack(track: Track, newQueue: List<Track>? = null) {
         audioRepository.addTracks(listOf(track))
         _allTracks.value = audioRepository.getMultiSourceTracks()
-        val currentQueue = newQueue ?: filteredTracks.value.ifEmpty { 
-            val recTracks = _recommendations.value.flatMap { it.tracks }
-            if (recTracks.isNotEmpty()) recTracks else listOf(track)
+        val currentQueue = newQueue ?: if (track.isLocal || track.isCachedOffline || track.source == StreamingSource.LOCAL_STORAGE) {
+            filteredTracks.value.ifEmpty { listOf(track) }
+        } else {
+            val onlineFiltered = filteredTracks.value.filter { !it.isLocal && !it.isCachedOffline && it.source != StreamingSource.LOCAL_STORAGE }
+            if (onlineFiltered.isNotEmpty()) onlineFiltered else {
+                val recTracks = _recommendations.value.flatMap { it.tracks }
+                if (recTracks.isNotEmpty()) recTracks else listOf(track)
+            }
         }
         val index = currentQueue.indexOfFirst { it.id == track.id }.coerceAtLeast(0)
         playerManager.setQueue(currentQueue, index)
