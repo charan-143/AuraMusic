@@ -79,21 +79,45 @@ fun PixelSyncedLyricsView(
 
     val lines = lyrics?.lines ?: emptyList()
 
-    // Find the currently active line index based on current playback position
-    // If playback is before the first lyric timestamp, activeIndex is -1 (Intro period)
-    val activeIndex = remember(currentPositionMs, lines) {
-        if (lines.isEmpty()) -1
-        else if (currentPositionMs < lines.first().timestampMs) -1
+    // Determine the current line by timestamp
+    val rawIndex = remember(currentPositionMs, lines) {
+        if (lines.isEmpty() || currentPositionMs < lines.first().timestampMs) -1
         else lines.indexOfLast { it.timestampMs <= currentPositionMs }
     }
 
-    // Auto-scroll to keep active line centered
-    LaunchedEffect(activeIndex) {
-        if (lines.isNotEmpty()) {
-            if (activeIndex in lines.indices) {
-                val targetScroll = (activeIndex - 1).coerceAtLeast(0)
+    // Check if the current line is actively being sung right now
+    // (i.e. not in an extended instrumental break, solo, or past the end of the song)
+    val isVocalActive = remember(currentPositionMs, rawIndex, lines) {
+        if (rawIndex !in lines.indices) return@remember false
+        val currentLine = lines[rawIndex]
+        val nextLine = lines.getOrNull(rawIndex + 1)
+
+        val durationEstimateMs = (currentLine.text.length * 75L + 2200L).coerceIn(2500L, 8500L)
+        val gapToNextMs = nextLine?.let { it.timestampMs - currentLine.timestampMs }
+
+        if (gapToNextMs != null && gapToNextMs <= 9000L) {
+            // Lines are in close succession (< 9s), line is active until next starts
+            currentPositionMs < nextLine.timestampMs
+        } else {
+            // There is a longer gap (> 9s) or it's the final line of the song.
+            // Vocal expires after estimated singing duration.
+            currentPositionMs <= (currentLine.timestampMs + durationEstimateMs)
+        }
+    }
+
+    // Outro check: has the last vocal line ended?
+    val isOutro = remember(currentPositionMs, rawIndex, isVocalActive, lines) {
+        lines.isNotEmpty() && rawIndex == lines.lastIndex && !isVocalActive
+    }
+
+    // Auto-scroll to keep active line centered without snapping back to 0 on breaks
+    LaunchedEffect(rawIndex) {
+        if (lines.isNotEmpty() && !listState.isScrollInProgress) {
+            if (rawIndex in lines.indices) {
+                val targetScroll = (rawIndex - 1).coerceAtLeast(0)
                 listState.animateScrollToItem(targetScroll)
-            } else if (activeIndex == -1) {
+            } else if (rawIndex == -1 && currentPositionMs < lines.first().timestampMs) {
+                // Only scroll to 0 during intro before first lyric
                 listState.animateScrollToItem(0)
             }
         }
@@ -101,6 +125,8 @@ fun PixelSyncedLyricsView(
 
     val badgeText = when {
         lines.isEmpty() -> "INSTRUMENTAL / NO LYRICS"
+        isOutro -> "OUTRO / INSTRUMENTAL"
+        !isVocalActive && rawIndex in lines.indices -> "MUSICAL INTERLUDE"
         lyrics?.source?.contains("LRCLIB", ignoreCase = true) == true -> "LIVE KARAOKE SYNC"
         lyrics?.source?.contains("Bank", ignoreCase = true) == true -> "VERIFIED KARAOKE SYNC"
         lyrics?.source?.contains("Saavn", ignoreCase = true) == true -> "STUDIO VOCAL SYNC"
@@ -252,8 +278,8 @@ fun PixelSyncedLyricsView(
                         .weight(1f)
                 ) {
                     itemsIndexed(lines) { index, line ->
-                        val isCurrent = index == activeIndex
-                        val isPast = index < activeIndex
+                        val isCurrent = (index == rawIndex) && isVocalActive
+                        val isPast = (index < rawIndex) || (index == rawIndex && !isVocalActive)
 
                         val scale by animateFloatAsState(
                             targetValue = if (isCurrent) 1.04f else 1.0f,
@@ -310,7 +336,7 @@ fun PixelSyncedLyricsView(
                                 )
                             }
 
-                            // Timestamp indicator for past or active lines
+                            // Timestamp indicator for active lines
                             if (isCurrent) {
                                 Text(
                                     text = line.formattedTimestamp,
@@ -318,6 +344,33 @@ fun PixelSyncedLyricsView(
                                     fontWeight = FontWeight.Bold,
                                     color = MonochromeSilver,
                                     modifier = Modifier.padding(start = 8.dp)
+                                )
+                            }
+                        }
+                    }
+
+                    if (isOutro) {
+                        item {
+                            Row(
+                                modifier = Modifier
+                                    .fillMaxWidth()
+                                    .padding(vertical = 16.dp),
+                                horizontalArrangement = Arrangement.Center,
+                                verticalAlignment = Alignment.CenterVertically
+                            ) {
+                                Icon(
+                                    imageVector = Icons.Default.GraphicEq,
+                                    contentDescription = null,
+                                    tint = MonochromeSilver,
+                                    modifier = Modifier.size(16.dp)
+                                )
+                                Spacer(modifier = Modifier.width(8.dp))
+                                Text(
+                                    text = "✦ Instrumental Outro ✦",
+                                    fontSize = 12.sp,
+                                    fontWeight = FontWeight.SemiBold,
+                                    letterSpacing = 1.sp,
+                                    color = MonochromeSilver
                                 )
                             }
                         }
