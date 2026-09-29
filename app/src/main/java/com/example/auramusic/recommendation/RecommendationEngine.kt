@@ -79,6 +79,10 @@ class RecommendationEngine(
      * Records when a user starts listening to a track.
      */
     fun recordPlaybackStart(track: Track) {
+        if (track.isLocal || track.isCachedOffline || track.source == StreamingSource.LOCAL_STORAGE) {
+            return
+        }
+
         val cleanArtist = extractPrimaryArtist(track.artist)
         if (cleanArtist.isNotBlank()) {
             artistAffinityMap[cleanArtist] = (artistAffinityMap[cleanArtist] ?: 0f) + 1.0f
@@ -109,6 +113,10 @@ class RecommendationEngine(
      * Strongly reinforces artist, vibe, and cultural affinity.
      */
     fun recordPlaybackCompletion(track: Track) {
+        if (track.isLocal || track.isCachedOffline || track.source == StreamingSource.LOCAL_STORAGE) {
+            return
+        }
+
         val cleanArtist = extractPrimaryArtist(track.artist)
         if (cleanArtist.isNotBlank()) {
             artistAffinityMap[cleanArtist] = (artistAffinityMap[cleanArtist] ?: 0f) + 2.5f
@@ -128,6 +136,10 @@ class RecommendationEngine(
      * Applies subtle decay so the engine avoids repeating tracks that induce skip fatigue.
      */
     fun recordSkip(track: Track, positionMs: Long, durationMs: Long) {
+        if (track.isLocal || track.isCachedOffline || track.source == StreamingSource.LOCAL_STORAGE) {
+            return
+        }
+
         if (positionMs < 25000L && durationMs > 60000L) {
             val cleanArtist = extractPrimaryArtist(track.artist)
             if (cleanArtist.isNotBlank()) {
@@ -270,7 +282,7 @@ class RecommendationEngine(
             providedTracks.isNotEmpty() -> providedTracks.filter { !it.isLocal && !it.isCachedOffline && it.source != StreamingSource.LOCAL_STORAGE }
             audioRepository.getMultiSourceTracks().isNotEmpty() -> audioRepository.getMultiSourceTracks().filter { !it.isLocal && !it.isCachedOffline && it.source != StreamingSource.LOCAL_STORAGE }
             else -> curatedFallbackTracks
-        }.ifEmpty { curatedFallbackTracks }
+        }.ifEmpty { curatedFallbackTracks }.deduplicated()
 
         val sections = mutableListOf<RecommendationSection>()
 
@@ -278,7 +290,7 @@ class RecommendationEngine(
         // SECTION 1: Made For You • Daily Mix (Personalized Algorithmic Blend)
         // -----------------------------------------------------------------
         val topArtists = getTopArtists(3)
-        val dailyMixTracks = rankTracksByUserAffinity(allTracks, activeTrack).take(6)
+        val dailyMixTracks = rankTracksByUserAffinity(allTracks, activeTrack).deduplicated().take(6)
         val dailyMixAlbums = allAlbums.sortedByDescending { album ->
             val albumArtist = extractPrimaryArtist(album.artist)
             (artistAffinityMap[albumArtist] ?: 0f) + if (activeTrack != null && album.artist.contains(activeTrack.artist, ignoreCase = true)) 10f else 0f
@@ -310,7 +322,7 @@ class RecommendationEngine(
         val timeContextTracks = allTracks.filter { track ->
             val vibe = detectVibe(track)
             timeCtx.preferredVibes.contains(vibe)
-        }.shuffled().take(6).ifEmpty { allTracks.shuffled().take(6) }
+        }.deduplicated().shuffled().take(6).ifEmpty { allTracks.deduplicated().shuffled().take(6) }
 
         val timeContextAlbums = allAlbums.filter { album ->
             timeCtx.source == album.source || album.isLossless
@@ -336,6 +348,7 @@ class RecommendationEngine(
                 .map { Pair(it, computeSimilarityScore(it, activeTrack)) }
                 .sortedByDescending { it.second }
                 .map { it.first }
+                .deduplicated()
                 .take(6)
 
             val relatedAlbums = allAlbums.filter {
@@ -358,7 +371,7 @@ class RecommendationEngine(
         // SECTION 4: Trending on Spotify (Chart-toppers in 320kbps)
         // -----------------------------------------------------------------
         val spotifyAlbums = allAlbums.filter { it.source == StreamingSource.SPOTIFY }.ifEmpty { allAlbums.take(4) }
-        val spotifyTracks = allTracks.filter { it.source == StreamingSource.SPOTIFY }.ifEmpty { allTracks.take(5) }
+        val spotifyTracks = allTracks.filter { it.source == StreamingSource.SPOTIFY }.deduplicated().ifEmpty { allTracks.deduplicated().take(6) }
         sections.add(
             RecommendationSection(
                 id = "rec_spotify_trending",
@@ -366,7 +379,7 @@ class RecommendationEngine(
                 subtitle = "Popular 320kbps full-length studio streams",
                 source = StreamingSource.SPOTIFY,
                 albums = spotifyAlbums,
-                tracks = spotifyTracks.take(5)
+                tracks = spotifyTracks.take(6)
             )
         )
 
@@ -374,7 +387,7 @@ class RecommendationEngine(
         // SECTION 5: Hot on YouTube Music (Lossless & Live Master Releases)
         // -----------------------------------------------------------------
         val ytmAlbums = allAlbums.filter { it.source == StreamingSource.YOUTUBE_MUSIC }.ifEmpty { allAlbums.drop(1).take(4) }
-        val ytmTracks = allTracks.filter { it.source == StreamingSource.YOUTUBE_MUSIC }.ifEmpty { allTracks.drop(2).take(5) }
+        val ytmTracks = allTracks.filter { it.source == StreamingSource.YOUTUBE_MUSIC }.deduplicated().ifEmpty { allTracks.deduplicated().drop(2).take(6) }
         sections.add(
             RecommendationSection(
                 id = "rec_ytm_hot",
@@ -382,7 +395,7 @@ class RecommendationEngine(
                 subtitle = "High-definition Opus master soundscapes & viral hits",
                 source = StreamingSource.YOUTUBE_MUSIC,
                 albums = ytmAlbums,
-                tracks = ytmTracks.take(5)
+                tracks = ytmTracks.take(6)
             )
         )
 
@@ -390,7 +403,7 @@ class RecommendationEngine(
         // SECTION 6: Audiophile Lossless Masterworks
         // -----------------------------------------------------------------
         val losslessAlbums = allAlbums.filter { it.isLossless }.ifEmpty { allAlbums.take(3) }
-        val losslessTracks = allTracks.filter { it.isLossless }.ifEmpty { allTracks.take(5) }
+        val losslessTracks = allTracks.filter { it.isLossless }.deduplicated().ifEmpty { allTracks.deduplicated().take(6) }
         sections.add(
             RecommendationSection(
                 id = "rec_lossless_masters",
@@ -398,7 +411,7 @@ class RecommendationEngine(
                 subtitle = "Studio master quality recordings in pure acoustic fidelity",
                 source = StreamingSource.LOSSLESS_FLAC,
                 albums = losslessAlbums,
-                tracks = losslessTracks.take(5)
+                tracks = losslessTracks.take(6)
             )
         )
 
@@ -406,8 +419,9 @@ class RecommendationEngine(
         // SECTION 7: Deep Cuts & Undiscovered Gems (Zero/Low Play Count)
         // -----------------------------------------------------------------
         val deepCuts = allTracks.filter { (playCountMap[it.id] ?: 0) == 0 }
+            .deduplicated()
             .shuffled()
-            .take(5)
+            .take(6)
 
         if (deepCuts.isNotEmpty()) {
             sections.add(
@@ -479,23 +493,43 @@ class RecommendationEngine(
      * Returns tracks matching a quick vibe/mood chip (e.g. Focus, Lofi, Cinematic, Rock, Devotional).
      */
     fun getTracksForMoodChip(chipName: String, pool: List<Track>): List<Track> {
-        val allTracks = pool.filter { !it.isLocal && !it.isCachedOffline && it.source != StreamingSource.LOCAL_STORAGE }.ifEmpty { curatedFallbackTracks }
+        val onlinePool = pool.filter { !it.isLocal && !it.isCachedOffline && it.source != StreamingSource.LOCAL_STORAGE }
         val targetVibe = MusicVibe.entries.firstOrNull { it.chipName.equals(chipName, ignoreCase = true) }
 
-        return if (targetVibe != null) {
-            allTracks.filter { detectVibe(it) == targetVibe }
+        val matches = if (targetVibe != null) {
+            onlinePool.filter { detectVibe(it) == targetVibe }
         } else {
             when (chipName.lowercase()) {
-                "all recommendations", "all" -> allTracks
-                "focus & study" -> allTracks.filter { detectVibe(it) == MusicVibe.DEEP_FOCUS || detectVibe(it) == MusicVibe.CINEMATIC_AMBIENT }
-                "lofi chill" -> allTracks.filter { detectVibe(it) == MusicVibe.LOFI_ACOUSTIC_INDIE }
-                "cinematic" -> allTracks.filter { detectVibe(it) == MusicVibe.CINEMATIC_AMBIENT }
-                "bass punch" -> allTracks.filter { detectVibe(it) == MusicVibe.HIGH_ENERGY_DANCE }
-                "acoustic" -> allTracks.filter { detectVibe(it) == MusicVibe.ROMANTIC_SOULFUL }
-                "rock" -> allTracks.filter { detectVibe(it) == MusicVibe.ROCK_ALTERNATIVE }
-                else -> allTracks
+                "all recommendations", "all", "all tracks" -> onlinePool
+                "focus & study" -> onlinePool.filter { detectVibe(it) == MusicVibe.DEEP_FOCUS || detectVibe(it) == MusicVibe.CINEMATIC_AMBIENT }
+                "lofi chill" -> onlinePool.filter { detectVibe(it) == MusicVibe.LOFI_ACOUSTIC_INDIE }
+                "cinematic" -> onlinePool.filter { detectVibe(it) == MusicVibe.CINEMATIC_AMBIENT }
+                "bass punch" -> onlinePool.filter { detectVibe(it) == MusicVibe.HIGH_ENERGY_DANCE }
+                "acoustic" -> onlinePool.filter { detectVibe(it) == MusicVibe.ROMANTIC_SOULFUL }
+                "rock" -> onlinePool.filter { detectVibe(it) == MusicVibe.ROCK_ALTERNATIVE }
+                else -> onlinePool
             }
         }
+
+        val enriched = if (matches.size < 4) {
+            val fallbackMatches = curatedFallbackTracks.filter { fb ->
+                if (targetVibe != null) detectVibe(fb) == targetVibe
+                else when (chipName.lowercase()) {
+                    "focus & study" -> detectVibe(fb) == MusicVibe.DEEP_FOCUS || detectVibe(fb) == MusicVibe.CINEMATIC_AMBIENT
+                    "lofi chill" -> detectVibe(fb) == MusicVibe.LOFI_ACOUSTIC_INDIE
+                    "cinematic" -> detectVibe(fb) == MusicVibe.CINEMATIC_AMBIENT
+                    "bass punch" -> detectVibe(fb) == MusicVibe.HIGH_ENERGY_DANCE
+                    "acoustic" -> detectVibe(fb) == MusicVibe.ROMANTIC_SOULFUL
+                    "rock" -> detectVibe(fb) == MusicVibe.ROCK_ALTERNATIVE
+                    else -> true
+                }
+            }
+            (matches + fallbackMatches).deduplicated()
+        } else {
+            matches.deduplicated()
+        }
+
+        return enriched.ifEmpty { curatedFallbackTracks.take(4) }
     }
 
     // ==========================================
@@ -606,28 +640,65 @@ class RecommendationEngine(
                (v1 == MusicVibe.ROCK_ALTERNATIVE && v2 == MusicVibe.CHART_TOPPING_POP)
     }
 
+    private fun isInvalidArtistName(artist: String): Boolean {
+        val lower = artist.lowercase().trim()
+        return lower.isBlank() ||
+               lower == "<unknown>" ||
+               lower == "unknown" ||
+               lower.contains("unknown") ||
+               lower == "device" ||
+               lower == "offline" ||
+               lower == "local" ||
+               lower == "phone storage"
+    }
+
     private fun extractPrimaryArtist(artist: String): String {
-        return artist.split(",", "&", "feat.", "ft.", "/").firstOrNull()?.trim() ?: artist.trim()
+        val clean = artist.split(",", "&", "feat.", "ft.", "/", "-").firstOrNull()?.trim() ?: artist.trim()
+        return if (isInvalidArtistName(clean)) "" else clean
     }
 
     private fun tokenizeArtist(artist: String): List<String> {
         return artist.split(",", "&", "feat.", "ft.", "/", "-")
             .map { it.trim().lowercase() }
-            .filter { it.length > 2 }
+            .filter { it.length > 2 && !isInvalidArtistName(it) }
     }
 
     fun getTopArtists(limit: Int = 3): List<String> {
         return artistAffinityMap.entries
+            .filter { !isInvalidArtistName(it.key) }
             .sortedByDescending { it.value }
             .take(limit)
             .map { it.key }
+    }
+
+    private fun cleanSongTitle(title: String): String {
+        return title.lowercase()
+            .replace(Regex("\\(.*?\\)"), "")
+            .replace(Regex("\\[.*?\\]"), "")
+            .replace(Regex("(?i)\\b(feat|ft|from|version|remix|lofi|slowed|reverb|reprise|audio|video|original|soundtrack|ost)\\b.*"), "")
+            .replace(Regex("[-–—].*"), "")
+            .replace(Regex("[^a-z0-9]"), "")
+            .trim()
+    }
+
+    fun List<Track>.deduplicated(): List<Track> {
+        val seen = HashSet<String>()
+        return filter { track ->
+            val clean = cleanSongTitle(track.title)
+            val key = if (clean.length >= 3) clean else track.title.lowercase().trim()
+            seen.add(key)
+        }
     }
 
     private fun persistAffinities() {
         prefs ?: return
         try {
             val artistJson = JSONObject()
-            artistAffinityMap.forEach { (k, v) -> artistJson.put(k, v.toDouble()) }
+            artistAffinityMap.forEach { (k, v) ->
+                if (!isInvalidArtistName(k)) {
+                    artistJson.put(k, v.toDouble())
+                }
+            }
 
             val vibeJson = JSONObject()
             vibeAffinityMap.forEach { (k, v) -> vibeJson.put(k.name, v.toDouble()) }
@@ -651,7 +722,15 @@ class RecommendationEngine(
             prefs.getString("user_artists", null)?.let { jsonStr ->
                 val obj = JSONObject(jsonStr)
                 obj.keys().forEach { key ->
-                    artistAffinityMap[key] = obj.optDouble(key, 0.0).toFloat()
+                    if (!isInvalidArtistName(key)) {
+                        artistAffinityMap[key] = obj.optDouble(key, 0.0).toFloat()
+                    }
+                }
+            }
+            // Purge contaminated entries immediately
+            artistAffinityMap.keys.forEach { key ->
+                if (isInvalidArtistName(key)) {
+                    artistAffinityMap.remove(key)
                 }
             }
             prefs.getString("user_vibes", null)?.let { jsonStr ->

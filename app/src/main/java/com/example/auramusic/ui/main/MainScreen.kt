@@ -355,7 +355,8 @@ fun MainScreen(
                             ) {
                                 val moodChips = listOf("All Recommendations", "Focus & Study", "Lofi Chill", "Cinematic", "Bass Punch", "Acoustic", "Rock")
                                 items(moodChips) { mood ->
-                                    val isSelected = selectedCategory.equals(mood, ignoreCase = true)
+                                    val isSelected = selectedCategory.equals(mood, ignoreCase = true) ||
+                                        (mood == "All Recommendations" && (selectedCategory == "All Tracks" || selectedCategory == "All Recommendations" || selectedCategory.isBlank()))
                                     Box(
                                         contentAlignment = Alignment.Center,
                                         modifier = Modifier
@@ -446,7 +447,7 @@ fun MainScreen(
                                                         track = track,
                                                         isSelected = isSelected,
                                                         isPlaying = playerState.isPlaying,
-                                                        onClick = { viewModel.playTrack(track) },
+                                                        onClick = { viewModel.playTrack(track, section.tracks) },
                                                         onMoreClick = { viewModel.openAddToPlaylist(track) }
                                                     )
                                                 }
@@ -2233,7 +2234,7 @@ fun MainScreen(
                     queue = playerState.queue,
                     currentTrackId = playerState.currentTrack?.id,
                     isPlaying = playerState.isPlaying,
-                    onTrackClick = { viewModel.playTrack(it) },
+                    onTrackClick = { viewModel.playTrack(it, playerState.queue) },
                     onCloseClick = { viewModel.setQueueVisible(false) },
                     onShuffleClick = { viewModel.toggleShuffle() },
                     onClearQueue = { viewModel.clearQueue() },
@@ -2286,7 +2287,7 @@ fun MainScreen(
                     album = album,
                     visible = isAlbumSheetVisible,
                     onDismiss = { viewModel.closeAlbumSheet() },
-                    onPlayTrack = { viewModel.playTrack(it) },
+                    onPlayTrack = { viewModel.playTrack(it, album.tracks.ifEmpty { listOf(it) }) },
                     onPlayAll = { viewModel.playAlbum(album) },
                     onShuffleAll = { viewModel.shuffleAlbum(album) },
                     onAddToPlaylistClick = { viewModel.openAddToPlaylist(it) }

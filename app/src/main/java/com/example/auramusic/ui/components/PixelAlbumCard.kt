@@ -162,8 +162,13 @@ fun PixelAlbumCard(
                     modifier = Modifier.weight(1f, fill = false)
                 )
                 Spacer(modifier = Modifier.width(4.dp))
+                val metaText = when {
+                    album.tracks.size > 1 -> "• ${album.tracks.size} tracks"
+                    album.year.isNotBlank() && album.year != "0" -> "• ${album.year}"
+                    else -> "• Album"
+                }
                 Text(
-                    text = "• ${album.trackCount} tracks",
+                    text = metaText,
                     fontSize = 10.sp,
                     color = colors.textTertiary
                 )
