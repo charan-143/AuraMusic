@@ -1,473 +1,59 @@
 package com.example.auramusic.ui.components
 
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.core.FastOutSlowInEasing
-import androidx.compose.animation.core.RepeatMode
-import androidx.compose.animation.core.animateFloat
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.infiniteRepeatable
-import androidx.compose.animation.core.rememberInfiniteTransition
-import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.foundation.background
-import androidx.compose.foundation.border
-import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.PaddingValues
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.interaction.collectIsDraggedAsState
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
-import androidx.compose.foundation.shape.CircleShape
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Album
-import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.Mic
-import androidx.compose.material3.CircularProgressIndicator
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.remember
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.setValue
-import androidx.compose.material.icons.filled.FormatQuote
-import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
-import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.example.auramusic.model.TrackLyrics
-import com.example.auramusic.theme.MonochromeBlack
-import com.example.auramusic.theme.MonochromeLightGrey
-import com.example.auramusic.theme.MonochromeMuted
-import com.example.auramusic.theme.MonochromeOutline
-import com.example.auramusic.theme.MonochromeOutlineVariant
-import com.example.auramusic.theme.MonochromeSilver
-import com.example.auramusic.theme.MonochromeSurface
-import com.example.auramusic.theme.MonochromeSurfaceContainer
-import com.example.auramusic.theme.MonochromeWhite
-import com.example.auramusic.theme.PixelMotion
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun PixelSyncedLyricsView(
-    lyrics: TrackLyrics?,
-    currentPositionMs: Long,
-    onSeekToTimestamp: (Long) -> Unit,
-    onSwitchToAlbumArt: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val haptic = LocalHapticFeedback.current
+fun PixelSyncedLyricsView(lyrics: TrackLyrics?, currentPositionMs: Long, onSeekToTimestamp: (Long) -> Unit, onSwitchToAlbumArt: () -> Unit, modifier: Modifier = Modifier) {
     val listState = rememberLazyListState()
-
-    val lines = lyrics?.lines ?: emptyList()
-    var selectedQuoteText by remember { mutableStateOf<String?>(null) }
-    var isKaraokeMode by remember { mutableStateOf(false) }
-
-    // Determine the current line by timestamp
-    val rawIndex = remember(currentPositionMs, lines) {
-        if (lines.isEmpty() || currentPositionMs < lines.first().timestampMs) -1
-        else lines.indexOfLast { it.timestampMs <= currentPositionMs }
+    var follow by remember(lyrics?.trackId) { mutableStateOf(true) }
+    var quote by remember(lyrics?.trackId) { mutableStateOf<String?>(null) }
+    val dragged by listState.interactionSource.collectIsDraggedAsState()
+    LaunchedEffect(dragged) { if (dragged) follow = false }
+    val active = lyrics?.lines?.indexOfLast { it.timestampMs <= currentPositionMs } ?: -1
+    LaunchedEffect(active, follow, lyrics?.trackId) {
+        if (follow && lyrics?.isSynced == true && active >= 0) listState.animateScrollToItem((active - 1).coerceAtLeast(0))
     }
-
-    // Check if the current line is actively being sung right now
-    // (i.e. not in an extended instrumental break, solo, or past the end of the song)
-    val isVocalActive = remember(currentPositionMs, rawIndex, lines) {
-        if (rawIndex !in lines.indices) return@remember false
-        val currentLine = lines[rawIndex]
-        val nextLine = lines.getOrNull(rawIndex + 1)
-
-        val durationEstimateMs = (currentLine.text.length * 75L + 2200L).coerceIn(2500L, 8500L)
-        val gapToNextMs = nextLine?.let { it.timestampMs - currentLine.timestampMs }
-
-        if (gapToNextMs != null && gapToNextMs <= 9000L) {
-            // Lines are in close succession (< 9s), line is active until next starts
-            currentPositionMs < nextLine.timestampMs
+    Column(modifier.fillMaxSize()) {
+        if (lyrics == null || lyrics.isLoading) {
+            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(16.dp)) { CircularProgressIndicator(Modifier.size(24.dp)); Text("Finding lyrics…") }
+            }
+        } else if (!lyrics.hasLines && lyrics.plainLyrics.isBlank()) {
+            Box(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) { Text("Lyrics aren’t available for this song yet.", style = MaterialTheme.typography.titleMedium) }
+            TextButton(onClick = onSwitchToAlbumArt) { Text("Back to artwork") }
         } else {
-            // There is a longer gap (> 9s) or it's the final line of the song.
-            // Vocal expires after estimated singing duration.
-            currentPositionMs <= (currentLine.timestampMs + durationEstimateMs)
-        }
-    }
-
-    // Outro check: has the last vocal line ended?
-    val isOutro = remember(currentPositionMs, rawIndex, isVocalActive, lines) {
-        lines.isNotEmpty() && rawIndex == lines.lastIndex && !isVocalActive
-    }
-
-    // Auto-scroll to keep active line centered without snapping back to 0 on breaks
-    LaunchedEffect(rawIndex) {
-        if (lines.isNotEmpty() && !listState.isScrollInProgress) {
-            if (rawIndex in lines.indices) {
-                val targetScroll = (rawIndex - 1).coerceAtLeast(0)
-                listState.animateScrollToItem(targetScroll)
-            } else if (rawIndex == -1 && currentPositionMs < lines.first().timestampMs) {
-                // Only scroll to 0 during intro before first lyric
-                listState.animateScrollToItem(0)
+            Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Text(if (lyrics.isSynced && lyrics.hasLines) "Synced lyrics" else "Lyrics", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f), color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (lyrics.isSynced && lyrics.hasLines) FilterChip(selected = follow, onClick = { follow = !follow }, label = { Text(if (follow) "Following" else "Follow song") })
             }
-        }
-    }
-
-    val badgeText = when {
-        lines.isEmpty() -> "INSTRUMENTAL / NO LYRICS"
-        isOutro -> "OUTRO / INSTRUMENTAL"
-        !isVocalActive && rawIndex in lines.indices -> "MUSICAL INTERLUDE"
-        lyrics?.source?.contains("LRCLIB", ignoreCase = true) == true -> "LIVE KARAOKE SYNC"
-        lyrics?.source?.contains("Bank", ignoreCase = true) == true -> "VERIFIED KARAOKE SYNC"
-        lyrics?.source?.contains("Saavn", ignoreCase = true) == true -> "STUDIO VOCAL SYNC"
-        lyrics?.source?.contains("Cadence", ignoreCase = true) == true -> "DYNAMIC CADENCE SYNC"
-        else -> "LIVE SYNCED LYRICS"
-    }
-
-    // Live pulsing dot animation
-    val infiniteTransition = rememberInfiniteTransition(label = "lyricsPulse")
-    val dotAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.35f,
-        targetValue = 1.0f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(800, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse
-        ),
-        label = "dotAlpha"
-    )
-
-    Box(
-        modifier = modifier
-            .fillMaxSize()
-            .clip(RoundedCornerShape(28.dp))
-            .background(MonochromeBlack)
-            .border(1.dp, MonochromeOutline, RoundedCornerShape(28.dp))
-            .padding(16.dp)
-    ) {
-        Column(modifier = Modifier.fillMaxSize()) {
-            // Header Bar: Synced Badge, Source, and Album Art Switcher
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(bottom = 12.dp),
-                horizontalArrangement = Arrangement.SpaceBetween,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(14.dp))
-                        .background(MonochromeSurfaceContainer)
-                        .border(1.dp, MonochromeOutlineVariant, RoundedCornerShape(14.dp))
-                        .padding(horizontal = 10.dp, vertical = 5.dp)
-                ) {
-                    Box(
-                        modifier = Modifier
-                            .size(7.dp)
-                            .clip(CircleShape)
-                            .background(MonochromeWhite.copy(alpha = dotAlpha))
-                    )
-                    Spacer(modifier = Modifier.width(6.dp))
-                    Text(
-                        text = badgeText,
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Bold,
-                        letterSpacing = 1.1.sp,
-                        color = MonochromeWhite
-                    )
-                }
-
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(
-                        text = lyrics?.source ?: "LRCLIB Sync",
-                        fontSize = 10.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = MonochromeSilver,
-                        modifier = Modifier.padding(end = 8.dp)
-                    )
-
-                    // Karaoke Stage Mode Toggle
-                    IconButton(
-                        onClick = {
-                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                            isKaraokeMode = !isKaraokeMode
-                        },
-                        modifier = Modifier
-                            .size(34.dp)
-                            .clip(RoundedCornerShape(10.dp))
-                            .background(if (isKaraokeMode) MonochromeWhite else Color.Transparent)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Mic,
-                            contentDescription = "Toggle Karaoke Stage Mode",
-                            tint = if (isKaraokeMode) MonochromeBlack else MonochromeWhite,
-                            modifier = Modifier.size(18.dp)
-                        )
+            LazyColumn(state = listState, modifier = Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(vertical = 20.dp), verticalArrangement = Arrangement.spacedBy(20.dp)) {
+                if (lyrics.hasLines) {
+                    itemsIndexed(lyrics.lines) { index, line ->
+                        Text(line.text.ifBlank { "♪" }, fontSize = 24.sp, lineHeight = 34.sp, fontWeight = if (index == active && lyrics.isSynced) FontWeight.Bold else FontWeight.Medium,
+                            color = if (index == active && lyrics.isSynced) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 48.dp).combinedClickable(onClickLabel = if (lyrics.isSynced) "Play from this line" else null, onClick = { if (lyrics.isSynced) onSeekToTimestamp(line.timestampMs) }, onLongClickLabel = "Share lyric", onLongClick = { quote = line.text }))
                     }
-
-                    // Quick Quote Card button
-                    IconButton(
-                        onClick = {
-                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                            val currentText = if (rawIndex in lines.indices) lines[rawIndex].text else lines.firstOrNull()?.text
-                            if (!currentText.isNullOrBlank()) {
-                                selectedQuoteText = currentText
-                            }
-                        },
-                        modifier = Modifier.size(34.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.FormatQuote,
-                            contentDescription = "Quote Current Lyric",
-                            tint = MonochromeWhite,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
-
-                    // Quick Toggle button to switch back to Album Artwork
-                    IconButton(
-                        onClick = {
-                            haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                            onSwitchToAlbumArt()
-                        },
-                        modifier = Modifier.size(34.dp)
-                    ) {
-                        Icon(
-                            imageVector = Icons.Default.Album,
-                            contentDescription = "Show Album Art",
-                            tint = MonochromeWhite,
-                            modifier = Modifier.size(20.dp)
-                        )
-                    }
+                } else {
+                    item { Text(lyrics.plainLyrics, fontSize = 22.sp, lineHeight = 34.sp) }
                 }
             }
-
-            if (lyrics == null || lyrics.isLoading) {
-                // Loading State
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        CircularProgressIndicator(
-                            strokeWidth = 2.dp,
-                            color = MonochromeWhite,
-                            modifier = Modifier.size(28.dp)
-                        )
-                        Spacer(modifier = Modifier.height(14.dp))
-                        Text(
-                            text = "Synchronizing lyrics from LRCLIB...",
-                            fontSize = 12.sp,
-                            fontWeight = FontWeight.Medium,
-                            color = MonochromeSilver
-                        )
-                    }
-                }
-            } else if (lines.isEmpty()) {
-                // Empty / Instrumental State
-                Box(
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Column(horizontalAlignment = Alignment.CenterHorizontally) {
-                        Icon(
-                            imageVector = Icons.Default.GraphicEq,
-                            contentDescription = null,
-                            tint = MonochromeSilver,
-                            modifier = Modifier.size(36.dp)
-                        )
-                        Spacer(modifier = Modifier.height(12.dp))
-                        Text(
-                            text = "✦ Original Lyrics Not Available ✦",
-                            fontSize = 15.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MonochromeWhite
-                        )
-                        Spacer(modifier = Modifier.height(4.dp))
-                        Text(
-                            text = "High-fidelity lossless playback active",
-                            fontSize = 12.sp,
-                            color = MonochromeSilver
-                        )
-                    }
-                }
-            } else {
-                // Synced Lyrics LazyColumn
-                LazyColumn(
-                    state = listState,
-                    contentPadding = PaddingValues(top = 16.dp, bottom = 48.dp),
-                    verticalArrangement = Arrangement.spacedBy(16.dp),
-                    modifier = Modifier
-                        .fillMaxWidth()
-                        .weight(1f)
-                ) {
-                    itemsIndexed(lines) { index, line ->
-                        val isCurrent = (index == rawIndex) && isVocalActive
-                        val isPast = (index < rawIndex) || (index == rawIndex && !isVocalActive)
-
-                        val scale by animateFloatAsState(
-                            targetValue = if (isCurrent) 1.04f else 1.0f,
-                            animationSpec = PixelMotion.BouncySpring,
-                            label = "lyricScale_$index"
-                        )
-
-                        val textColor = when {
-                            isCurrent -> MonochromeWhite
-                            isPast -> if (isKaraokeMode) MonochromeSilver.copy(alpha = 0.4f) else MonochromeSilver.copy(alpha = 0.85f)
-                            else -> if (isKaraokeMode) MonochromeMuted.copy(alpha = 0.35f) else MonochromeMuted
-                        }
-
-                        val fontSize = if (isCurrent) (if (isKaraokeMode) 26.sp else 20.sp) else (if (isKaraokeMode) 15.sp else 16.sp)
-                        val fontWeight = if (isCurrent) (if (isKaraokeMode) FontWeight.ExtraBold else FontWeight.Bold) else FontWeight.Medium
-                        val lineHeight = if (isCurrent) (if (isKaraokeMode) 34.sp else 26.sp) else 22.sp
-
-                        Row(
-                            verticalAlignment = Alignment.CenterVertically,
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .scale(scale)
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(
-                                    if (isCurrent) {
-                                        if (isKaraokeMode) MonochromeWhite.copy(alpha = 0.12f)
-                                        else MonochromeSurfaceContainer.copy(alpha = 0.55f)
-                                    } else Color.Transparent
-                                )
-                                .then(
-                                    if (isCurrent && isKaraokeMode) {
-                                        Modifier.border(1.dp, MonochromeWhite.copy(alpha = 0.3f), RoundedCornerShape(16.dp))
-                                    } else Modifier
-                                )
-                                .pointerInput(line.timestampMs, line.text) {
-                                    detectTapGestures(
-                                        onTap = {
-                                             haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                                             onSeekToTimestamp(line.timestampMs)
-                                        },
-                                        onLongPress = {
-                                             haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                                             selectedQuoteText = line.text
-                                        }
-                                    )
-                                }
-                                .padding(horizontal = 14.dp, vertical = if (isKaraokeMode && isCurrent) 12.dp else 8.dp)
-                        ) {
-                            if (isCurrent) {
-                                if (isKaraokeMode) {
-                                    Icon(
-                                        imageVector = Icons.Default.Mic,
-                                        contentDescription = "Singing Now",
-                                        tint = MonochromeWhite,
-                                        modifier = Modifier.size(16.dp)
-                                    )
-                                    Spacer(modifier = Modifier.width(8.dp))
-                                } else {
-                                    Box(
-                                        modifier = Modifier
-                                            .width(3.dp)
-                                            .height(18.dp)
-                                            .clip(RoundedCornerShape(2.dp))
-                                            .background(MonochromeWhite)
-                                    )
-                                    Spacer(modifier = Modifier.width(10.dp))
-                                }
-                            }
-
-                            Column(modifier = Modifier.weight(1f)) {
-                                Text(
-                                    text = line.text,
-                                    fontSize = fontSize,
-                                    fontWeight = fontWeight,
-                                    color = textColor,
-                                    lineHeight = lineHeight
-                                )
-                            }
-
-                            // Timestamp indicator for active lines
-                            if (isCurrent) {
-                                Text(
-                                    text = line.formattedTimestamp,
-                                    fontSize = 11.sp,
-                                    fontWeight = FontWeight.Bold,
-                                    color = MonochromeSilver,
-                                    modifier = Modifier.padding(start = 8.dp)
-                                )
-                            }
-                        }
-                    }
-
-                    if (isOutro) {
-                        item {
-                            Row(
-                                modifier = Modifier
-                                    .fillMaxWidth()
-                                    .padding(vertical = 16.dp),
-                                horizontalArrangement = Arrangement.Center,
-                                verticalAlignment = Alignment.CenterVertically
-                            ) {
-                                Icon(
-                                    imageVector = Icons.Default.GraphicEq,
-                                    contentDescription = null,
-                                    tint = MonochromeSilver,
-                                    modifier = Modifier.size(16.dp)
-                                )
-                                Spacer(modifier = Modifier.width(8.dp))
-                                Text(
-                                    text = "✦ Instrumental Outro ✦",
-                                    fontSize = 12.sp,
-                                    fontWeight = FontWeight.SemiBold,
-                                    letterSpacing = 1.sp,
-                                    color = MonochromeSilver
-                                )
-                            }
-                        }
-                    }
-                }
-            }
-        }
-
-        // Bottom gradient fade overlay for smooth aesthetic falloff
-        Box(
-            modifier = Modifier
-                .align(Alignment.BottomCenter)
-                .fillMaxWidth()
-                .height(36.dp)
-                .background(
-                    Brush.verticalGradient(
-                        colors = listOf(Color.Transparent, MonochromeBlack)
-                    )
-                )
-        )
-
-        // Pixel Lyric Quote Card Dialog
-        selectedQuoteText?.let { quote ->
-            PixelLyricQuoteDialog(
-                lyricText = quote,
-                trackTitle = lyrics?.title ?: "Current Track",
-                trackArtist = lyrics?.artist ?: "Unknown Artist",
-                onDismiss = { selectedQuoteText = null }
-            )
+            if (lyrics.source.isNotBlank()) Text(lyrics.source, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(vertical = 8.dp))
         }
     }
+    quote?.let { PixelLyricQuoteDialog(it, lyrics?.title.orEmpty(), lyrics?.artist.orEmpty()) { quote = null } }
 }

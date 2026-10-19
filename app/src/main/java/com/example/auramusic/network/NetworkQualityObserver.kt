@@ -11,10 +11,10 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 
 enum class ConnectionQuality(val displayLabel: String, val shortBadge: String) {
-    EXCELLENT_5G_WIFI("Lossless 5G/WiFi", "5G LOSSLESS"),
+    EXCELLENT_5G_WIFI("Strong connection", "CONNECTED"),
     CELLULAR_ROAMING("Roaming (Shield Active)", "ROAMING"),
     WEAK_VARIABLE_SIGNAL("Variable Signal (Adaptive)", "ADAPTIVE"),
-    OFFLINE_SHIELD("Offline Shield (Playing Cache)", "OFFLINE")
+    OFFLINE_SHIELD("Offline", "OFFLINE")
 }
 
 /**
@@ -29,25 +29,25 @@ enum class AutoAudioQuality(
     val description: String
 ) {
     LOSSLESS_MASTER(
-        "24-Bit FLAC (Lossless)",
-        "AUTO 24-BIT",
+        "Original quality preference",
+        "AUTO",
         1411,
-        "24-bit / 96kHz Master",
-        "High bandwidth & strong signal. Streaming uncompressed studio master."
+        "Original stream format",
+        "Strong signal. Actual audio format depends on the source."
     ),
     HIGH_QUALITY_320(
-        "Spotify High (320kbps)",
+        "High (up to 320kbps)",
         "AUTO 320K",
         320,
-        "320kbps Ultra-HD",
+        "Up to 320kbps preference",
         "Good cellular/WiFi signal. High bitrate audio stream."
     ),
     BALANCED_256(
-        "YouTube Music Opus (256kbps)",
+        "Balanced (up to 256kbps)",
         "AUTO 256K",
         256,
-        "256kbps Opus HD",
-        "Signal fluctuating. Dynamically balanced to eliminate buffering."
+        "Up to 256kbps preference",
+        "Signal fluctuating. Prefer a lower bitrate when the stream offers one."
     ),
     DATA_SAVER_128(
         "Data Saver (128kbps)",
@@ -61,7 +61,7 @@ enum class AutoAudioQuality(
         "OFFLINE",
         0,
         "Local 1GB Adaptive Cache",
-        "Network connection lost. Seamlessly playing from local cache."
+        "Network unavailable. Downloaded or cached audio may still be available."
     )
 }
 
@@ -70,7 +70,7 @@ data class NetworkStatus(
     val isRoaming: Boolean = false,
     val isWifi: Boolean = true,
     val quality: ConnectionQuality = ConnectionQuality.EXCELLENT_5G_WIFI,
-    val statusText: String = "5G Lossless Connected",
+    val statusText: String = "Checking connection",
     val downstreamBandwidthKbps: Int = 15000,
     val signalPercent: Int = 95,
     val autoAudioQuality: AutoAudioQuality = AutoAudioQuality.LOSSLESS_MASTER,
@@ -104,7 +104,7 @@ class NetworkQualityObserver(context: Context) {
                 signalPercent = 0,
                 autoAudioQuality = AutoAudioQuality.OFFLINE_CACHE,
                 isSignalFluctuating = false,
-                fluctuationNote = "Offline Shield: Playing from 1GB cache"
+                fluctuationNote = "Offline: cached audio may be available"
             )
         }
 
@@ -130,7 +130,7 @@ class NetworkQualityObserver(context: Context) {
             signalPercent = 0,
             autoAudioQuality = AutoAudioQuality.OFFLINE_CACHE,
             isSignalFluctuating = false,
-            fluctuationNote = "Offline Shield: Playing from 1GB cache"
+            fluctuationNote = "Offline: cached audio may be available"
         )
         val caps = connectivityManager.getNetworkCapabilities(activeNetwork) ?: return NetworkStatus(
             isConnected = false,
@@ -140,7 +140,7 @@ class NetworkQualityObserver(context: Context) {
             signalPercent = 0,
             autoAudioQuality = AutoAudioQuality.OFFLINE_CACHE,
             isSignalFluctuating = false,
-            fluctuationNote = "Offline Shield: Playing from 1GB cache"
+            fluctuationNote = "Offline: cached audio may be available"
         )
         return evaluateCaps(caps)
     }
@@ -159,7 +159,7 @@ class NetworkQualityObserver(context: Context) {
                 signalPercent = 0,
                 autoAudioQuality = AutoAudioQuality.OFFLINE_CACHE,
                 isSignalFluctuating = false,
-                fluctuationNote = "Offline Shield: Playing from 1GB cache"
+                fluctuationNote = "Offline: cached audio may be available"
             )
         }
     }
@@ -215,13 +215,13 @@ class NetworkQualityObserver(context: Context) {
         }
 
         val fluctuationNote = when {
-            !hasInternet -> "Offline Shield: Playing from 1GB cache"
-            isRoaming -> "Roaming Detected: Switched to 128k Data Saver"
-            isFluctuating -> "Signal Dip Detected: Auto-switched to 256k Opus buffer shield"
-            autoQuality == AutoAudioQuality.LOSSLESS_MASTER -> if (isWifi) "WiFi Signal Strong: 24-bit FLAC Lossless active" else "5G Signal Strong: 24-bit FLAC Lossless active"
-            autoQuality == AutoAudioQuality.HIGH_QUALITY_320 -> "4G Stable: 320kbps High Quality active"
-            autoQuality == AutoAudioQuality.BALANCED_256 -> "Moderate Signal: 256kbps balanced stream active"
-            else -> "Weak Signal: 128kbps low-latency stream active"
+            !hasInternet -> "Offline: cached audio may be available"
+            isRoaming -> "Roaming detected: prefer data saver"
+            isFluctuating -> "Signal dip detected: prefer a lower bitrate"
+            autoQuality == AutoAudioQuality.LOSSLESS_MASTER -> if (isWifi) "Strong Wi-Fi signal" else "Strong network signal"
+            autoQuality == AutoAudioQuality.HIGH_QUALITY_320 -> "Stable connection: high bitrate preferred"
+            autoQuality == AutoAudioQuality.BALANCED_256 -> "Moderate signal: balanced bitrate preferred"
+            else -> "Weak signal: data saver preferred"
         }
 
         val text = when (autoQuality) {

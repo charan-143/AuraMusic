@@ -1,10 +1,11 @@
 package com.example.auramusic.model
 
 enum class StreamingSource(val displayName: String, val badge: String) {
-    SPOTIFY("Spotify", "SPOTIFY LOSSLESS"),
-    YOUTUBE_MUSIC("YouTube Music", "YT LOSSLESS"),
+    JIOSAAVN("JioSaavn", "JIOSAAVN"),
+    SPOTIFY("Spotify", "SPOTIFY"),
+    YOUTUBE_MUSIC("YouTube Music", "YOUTUBE MUSIC"),
     LOSSLESS_FLAC("Lossless Master", "24-BIT FLAC"),
-    LOCAL_STORAGE("Device Storage", "LOCAL FLAC")
+    LOCAL_STORAGE("Device Storage", "LOCAL AUDIO")
 }
 
 enum class AudioBitrateMode(val label: String, val kbps: Int) {
@@ -23,14 +24,15 @@ data class Track(
     val audioUrl: String = "",
     val fallbackLowBitrateUrl: String = "",
     val coverArtUrl: String = "",
-    val source: StreamingSource = StreamingSource.LOSSLESS_FLAC,
-    val qualityBadge: String = "24-BIT FLAC",
-    val isLossless: Boolean = true,
+    val source: StreamingSource = StreamingSource.LOCAL_STORAGE,
+    val qualityBadge: String = "Audio",
+    val isLossless: Boolean = false,
     val isCachedOffline: Boolean = false,
     val isLocal: Boolean = false,
     val localFilePath: String? = null,
     val isFavorite: Boolean = false,
     val category: String = "Lossless", // "Spotify", "YouTube Music", "Lossless", "Lofi Chill", "Device Library"
+    val resolvedCatalogId: String = "",
     val waveformData: List<Float> = listOf(
         0.3f, 0.5f, 0.8f, 0.4f, 0.9f, 0.7f, 0.4f, 0.6f, 0.9f, 0.5f,
         0.3f, 0.7f, 0.8f, 0.9f, 0.6f, 0.4f, 0.8f, 0.5f, 0.3f, 0.6f,

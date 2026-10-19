@@ -46,7 +46,7 @@ fun PixelAtAGlanceHeader(
     modifier: Modifier = Modifier,
     isPlaying: Boolean = false,
     activeTrackTitle: String? = null,
-    networkStatusText: String = "5G Lossless Connected",
+    networkStatusText: String = "Checking connection",
     qualityBadge: String = "24-BIT FLAC",
     isTravelMode: Boolean = true,
     isDarkMode: Boolean = true,

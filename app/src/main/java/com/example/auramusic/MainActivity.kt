@@ -15,6 +15,11 @@ import coil.memory.MemoryCache
 import com.example.auramusic.theme.AuraMusicTheme
 
 class MainActivity : ComponentActivity() {
+    override fun onStop() {
+        com.example.auramusic.player.MusicPlayerManager.getInstance(applicationContext).saveListeningSession()
+        super.onStop()
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
@@ -36,10 +41,6 @@ class MainActivity : ComponentActivity() {
         Coil.setImageLoader(imageLoader)
 
         enableEdgeToEdge()
-        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O_MR1) {
-            setShowWhenLocked(true)
-            setTurnScreenOn(true)
-        }
         val permsToRequest = mutableListOf<String>()
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
             if (checkSelfPermission(android.Manifest.permission.READ_MEDIA_AUDIO) != android.content.pm.PackageManager.PERMISSION_GRANTED) {

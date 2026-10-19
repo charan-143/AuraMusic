@@ -13,7 +13,7 @@ import android.media.session.MediaSession as PlatformMediaSession
 import android.os.Build
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
-import coil.ImageLoader
+import coil.imageLoader
 import coil.request.ImageRequest
 import coil.request.SuccessResult
 import com.example.auramusic.MainActivity
@@ -38,6 +38,8 @@ class AuraMediaService : MediaSessionService() {
     private var observerJob: Job? = null
     private var lastArtworkUrl: String? = null
     private var cachedArtwork: Bitmap? = null
+    private var artworkJob: Job? = null
+    private var artworkTrackId: String? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -53,27 +55,31 @@ class AuraMediaService : MediaSessionService() {
         observerJob = CoroutineScope(Dispatchers.Main).launch {
             MusicPlayerManager.getInstance(applicationContext).playerState.collect { state ->
                 val track = state.currentTrack
-                if (track != null && track.coverArtUrl.isNotBlank() && track.coverArtUrl != lastArtworkUrl) {
-                    lastArtworkUrl = track.coverArtUrl
-                    loadArtwork(track.coverArtUrl)
+                if (track?.id != artworkTrackId || track?.coverArtUrl != lastArtworkUrl) {
+                    artworkJob?.cancel()
+                    artworkTrackId = track?.id
+                    lastArtworkUrl = track?.coverArtUrl
+                    cachedArtwork = null
+                    if (track != null && track.coverArtUrl.isNotBlank()) loadArtwork(track.id, track.coverArtUrl)
                 }
                 postMediaNotification(state.isPlaying)
             }
         }
     }
 
-    private fun loadArtwork(url: String) {
-        CoroutineScope(Dispatchers.IO).launch {
+    private fun loadArtwork(trackId: String, url: String) {
+        artworkJob = CoroutineScope(Dispatchers.Main).launch {
             try {
-                val loader = ImageLoader(applicationContext)
+                val loader = applicationContext.imageLoader
                 val request = ImageRequest.Builder(applicationContext)
                     .data(url)
                     .allowHardware(false)
+                    .size(512)
                     .build()
                 val result = loader.execute(request)
                 if (result is SuccessResult) {
                     val bitmap = (result.drawable as? BitmapDrawable)?.bitmap
-                    if (bitmap != null) {
+                    if (bitmap != null && artworkTrackId == trackId && lastArtworkUrl == url) {
                         cachedArtwork = bitmap
                         val player = MusicPlayerManager.getInstance(applicationContext)
                         postMediaNotification(player.playerState.value.isPlaying)
@@ -132,7 +138,7 @@ class AuraMediaService : MediaSessionService() {
         val player = MusicPlayerManager.getInstance(applicationContext)
         val currentTrack = player.playerState.value.currentTrack
         val title = currentTrack?.title ?: "AuraMusic"
-        val artist = currentTrack?.artist ?: "Lossless Audio"
+        val artist = currentTrack?.artist ?: "Audio"
 
         // Media control action intents
         val prevPendingIntent = PendingIntent.getService(
@@ -252,6 +258,7 @@ class AuraMediaService : MediaSessionService() {
     }
 
     override fun onDestroy() {
+        artworkJob?.cancel()
         observerJob?.cancel()
         observerJob = null
         super.onDestroy()

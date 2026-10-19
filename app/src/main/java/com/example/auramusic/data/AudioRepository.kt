@@ -12,27 +12,18 @@ import com.example.auramusic.model.StreamingSource
 import com.example.auramusic.model.Track
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
-import kotlin.math.absoluteValue
+
 
 class AudioRepository(private val context: Context) {
+    private val edits = TrackEdits(context)
 
     // Clean dynamic music repository without hardcoded dummy songs
     private val dynamicTracks = mutableListOf<Track>()
     private val dynamicAlbums = mutableListOf<Album>()
 
-    private val colorfulFallbacks = listOf(
-        "https://images.unsplash.com/photo-1514525253161-7a46d19cd819?w=600&auto=format&fit=crop&q=80",
-        "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?w=600&auto=format&fit=crop&q=80",
-        "https://images.unsplash.com/photo-1506703719100-a0f3a48c0f86?w=600&auto=format&fit=crop&q=80",
-        "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?w=600&auto=format&fit=crop&q=80",
-        "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=600&auto=format&fit=crop&q=80",
-        "https://images.unsplash.com/photo-1550684848-fac1c5b4e853?w=600&auto=format&fit=crop&q=80",
-        "https://images.unsplash.com/photo-1470225620780-dba8ba36b745?w=600&auto=format&fit=crop&q=80",
-        "https://images.unsplash.com/photo-1511671782779-c97d3d27a1d4?w=600&auto=format&fit=crop&q=80"
-    )
 
     fun getMultiSourceTracks(): List<Track> = synchronized(dynamicTracks) {
-        dynamicTracks.toList()
+        dynamicTracks.map { edits.apply(it) }
     }
 
     fun getAllAlbums(): List<Album> = synchronized(dynamicAlbums) {
@@ -40,16 +31,18 @@ class AudioRepository(private val context: Context) {
     }
 
     fun addTracks(tracks: List<Track>) = synchronized(dynamicTracks) {
+        val ids = dynamicTracks.mapTo(HashSet()) { it.id }
         for (track in tracks) {
-            if (dynamicTracks.none { it.id == track.id }) {
+            if (ids.add(track.id)) {
                 dynamicTracks.add(track)
             }
         }
     }
 
     fun addAlbums(albums: List<Album>) = synchronized(dynamicAlbums) {
+        val ids = dynamicAlbums.mapTo(HashSet()) { it.id }
         for (album in albums) {
-            if (dynamicAlbums.none { it.id == album.id }) {
+            if (ids.add(album.id)) {
                 dynamicAlbums.add(album)
             }
         }
@@ -57,6 +50,11 @@ class AudioRepository(private val context: Context) {
 
     fun clearTracks() = synchronized(dynamicTracks) {
         dynamicTracks.clear()
+    }
+
+    fun updateTrack(track: Track) = synchronized(dynamicTracks) {
+        val index = dynamicTracks.indexOfFirst { it.id == track.id }
+        if (index >= 0) dynamicTracks[index] = track else dynamicTracks.add(track)
     }
 
     fun getAlbumsBySource(source: StreamingSource): List<Album> = synchronized(dynamicAlbums) {
@@ -119,10 +117,9 @@ class AudioRepository(private val context: Context) {
                     val albumId = if (albumIdColumn >= 0) it.getLong(albumIdColumn) else -1L
                     val filePath = if (dataColumn >= 0) it.getString(dataColumn) else null
 
-                    val fallbackArt = colorfulFallbacks[(id.hashCode().absoluteValue) % colorfulFallbacks.size]
                     val artUri = if (albumId >= 0) {
                         ContentUris.withAppendedId(Uri.parse("content://media/external/audio/albumart"), albumId).toString()
-                    } else fallbackArt
+                    } else ""
 
                     if (duration > 10000) {
                         val contentUri = ContentUris.withAppendedId(MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id)
@@ -135,9 +132,9 @@ class AudioRepository(private val context: Context) {
                             audioUrl = contentUri.toString(),
                             coverArtUrl = artUri,
                             isLocal = true,
-                            isLossless = true,
+                            isLossless = filePath?.endsWith(".flac", ignoreCase = true) == true || filePath?.endsWith(".wav", ignoreCase = true) == true,
                             source = StreamingSource.LOCAL_STORAGE,
-                            qualityBadge = "LOCAL FLAC",
+                            qualityBadge = "LOCAL AUDIO",
                             category = "Device Library",
                             localFilePath = filePath
                         )

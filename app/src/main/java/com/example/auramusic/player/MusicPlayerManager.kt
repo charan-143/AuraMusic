@@ -34,8 +34,13 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.cancel
 
-class MusicPlayerManager(private val context: Context) {
+class MusicPlayerManager(
+    private val context: Context,
+    private val catalogResolver: com.example.auramusic.network.CatalogTrackResolver = com.example.auramusic.network.CatalogTrackResolver()
+) {
 
     companion object {
         @Volatile
@@ -50,7 +55,16 @@ class MusicPlayerManager(private val context: Context) {
 
     private val scope = CoroutineScope(Dispatchers.Main + Job())
     private var positionTickerJob: Job? = null
+    private var artworkJob: Job? = null
+    private var trackResolutionJob: Job? = null
+    private var trackTransitionJob: Job? = null
     private var hasRecordedCurrentPlay = false
+    private val sessionStore = ListeningSessionStore(context)
+    private val playbackPrefs = context.getSharedPreferences("playback_preferences", Context.MODE_PRIVATE)
+    val normalizationProcessor = com.example.auramusic.audio.NormalizationAudioProcessor().apply {
+        enabled = playbackPrefs.getBoolean("normalize", true)
+    }
+    private var removedEntry: Pair<Track, Int>? = null
 
     private val _playerState = MutableStateFlow(PlayerState())
     val playerState: StateFlow<PlayerState> = _playerState.asStateFlow()
@@ -70,7 +84,13 @@ class MusicPlayerManager(private val context: Context) {
         val mediaSourceFactory = DefaultMediaSourceFactory(cacheManager.cacheDataSourceFactory, extractorsFactory)
         val loadControl = cacheManager.createTravelLoadControl()
 
-        ExoPlayer.Builder(context)
+        val renderers = object : androidx.media3.exoplayer.DefaultRenderersFactory(context) {
+            override fun buildAudioSink(context: Context, enableFloatOutput: Boolean, enableAudioTrackPlaybackParams: Boolean): androidx.media3.exoplayer.audio.AudioSink {
+                return androidx.media3.exoplayer.audio.DefaultAudioSink.Builder(context)
+                    .setAudioProcessors(arrayOf(normalizationProcessor)).setEnableFloatOutput(false).build()
+            }
+        }
+        ExoPlayer.Builder(context, renderers)
             .setMediaSourceFactory(mediaSourceFactory)
             .setLoadControl(loadControl)
             .build()
@@ -78,11 +98,16 @@ class MusicPlayerManager(private val context: Context) {
                 addListener(object : Player.Listener {
                     override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
                         Log.e("MusicPlayerManager", "ExoPlayer playback error: ${error.message}", error)
+                        reportPlaybackError("Couldn't play this song. Check your connection or try another song.")
                     }
                     override fun onAudioSessionIdChanged(audioSessionId: Int) {
                         if (audioSessionId > 0) {
                             equalizerManager.attachToSession(audioSessionId)
                         }
+                    }
+
+                    override fun onTracksChanged(tracks: androidx.media3.common.Tracks) {
+                        updateActualAudioQuality()
                     }
 
                     override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -96,6 +121,7 @@ class MusicPlayerManager(private val context: Context) {
 
                     override fun onPlaybackStateChanged(playbackState: Int) {
                         if (playbackState == Player.STATE_READY) {
+                            updateActualAudioQuality()
                             val duration = exoPlayer.duration.coerceAtLeast(0L)
                             val effectiveDuration = if (duration > 0) duration else (_playerState.value.currentTrack?.durationMs ?: 180000L)
                             _playerState.update {
@@ -111,8 +137,15 @@ class MusicPlayerManager(private val context: Context) {
                                 )
                             }
                         } else if (playbackState == Player.STATE_ENDED) {
-                            skipNext()
+                            if (_playerState.value.isRepeatOne) {
+                                exoPlayer.seekTo(0)
+                                exoPlayer.play()
+                            } else skipNext()
                         }
+                    }
+
+                    override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
+                        if (reason == Player.MEDIA_ITEM_TRANSITION_REASON_REPEAT) hasRecordedCurrentPlay = false
                     }
 
                     override fun onPositionDiscontinuity(
@@ -194,6 +227,13 @@ class MusicPlayerManager(private val context: Context) {
 
     init {
         instance = this
+        sessionStore.restore()?.let { (state, progress) ->
+            val edits = com.example.auramusic.data.TrackEdits(context)
+            _playerState.value = state.copy(queue = state.queue.map { edits.apply(it) }, currentTrack = state.currentTrack?.let { edits.apply(it) })
+            _playbackProgress.value = progress
+        }
+        scope.launch { playerState.collect { saveListeningSession() } }
+        scope.launch { while (isActive) { delay(2000); saveListeningSession() } }
         try {
             audioManager?.registerAudioDeviceCallback(audioDeviceCallback, Handler(Looper.getMainLooper()))
         } catch (e: Exception) {
@@ -227,12 +267,14 @@ class MusicPlayerManager(private val context: Context) {
     }
 
     fun setQueue(tracks: List<Track>, initialIndex: Int = 0) {
-        if (tracks.isEmpty()) return
-        val clampedIndex = initialIndex.coerceIn(0, tracks.lastIndex)
-        val selected = tracks[clampedIndex]
+        val safeTracks = tracks.map(com.example.auramusic.data.TrackMapping::sanitize)
+        if (safeTracks.isEmpty()) return
+        val clampedIndex = initialIndex.coerceIn(0, safeTracks.lastIndex)
+        val selected = safeTracks[clampedIndex]
         _playerState.update {
             it.copy(
-                queue = tracks,
+                queue = safeTracks,
+                queuedNextId = null,
                 currentIndex = clampedIndex,
                 currentTrack = selected,
                 durationMs = selected.durationMs,
@@ -246,26 +288,71 @@ class MusicPlayerManager(private val context: Context) {
             durationMs = selected.durationMs
         )
         // Predictive prefetch of next tracks
-        cacheManager.prefetchUpcomingTracks(tracks, clampedIndex)
+        cacheManager.prefetchUpcomingTracks(safeTracks, clampedIndex)
     }
 
-    fun playTrack(track: Track, newQueue: List<Track>? = null) {
-        val queue = newQueue ?: _playerState.value.queue.ifEmpty { listOf(track) }
+    fun playTrack(track: Track, newQueue: List<Track>? = null, startPositionMs: Long = 0) {
+        trackResolutionJob?.cancel()
+        trackTransitionJob?.cancel()
+        if (!com.example.auramusic.data.TrackMapping.needsResolution(track)) {
+            playResolvedTrack(track, newQueue, startPositionMs)
+            return
+        }
+        val queue = (newQueue ?: _playerState.value.queue).map(com.example.auramusic.data.TrackMapping::sanitize)
+        val safe = com.example.auramusic.data.TrackMapping.sanitize(track)
+        exoPlayer.stop()
+        exoPlayer.clearMediaItems()
+        stopTicker()
+        artworkJob?.cancel()
+        _playerState.update { it.copy(currentTrack = safe, isPlaying = false, playbackError = null,
+            queue = (if (queue.any { it.id == track.id }) queue else queue + safe).map { if(it.id == safe.id) safe else it },
+            currentIndex = queue.indexOfFirst { item -> item.id == safe.id }.coerceAtLeast(0),
+            currentPositionMs = startPositionMs, durationMs = safe.durationMs) }
+        _playbackProgress.value = PlaybackProgress(startPositionMs, 0, safe.durationMs)
+        trackResolutionJob = scope.launch {
+            try {
+                val downloaded = offlineDownloadManager.downloadedTracks.value.firstOrNull {
+                    it.id == track.id && !com.example.auramusic.data.TrackMapping.needsResolution(it)
+                }
+                val matched = downloaded ?: catalogResolver.resolve(track)
+                kotlinx.coroutines.currentCoroutineContext().ensureActive()
+                if (matched == null) {
+                    reportPlaybackError("Couldn't find a matching recording for this song. Search for its title and artist.")
+                } else {
+                    val repairedQueue = _playerState.value.queue.map { if (it.id == track.id) matched else it }
+                    playResolvedTrack(matched, repairedQueue, startPositionMs)
+                }
+            } catch (cancelled: kotlinx.coroutines.CancellationException) {
+                throw cancelled
+            } catch (_: Exception) {
+                reportPlaybackError("Couldn't verify this saved song. Connect to the internet and retry.")
+            }
+        }
+    }
+
+    private fun playResolvedTrack(track: Track, newQueue: List<Track>?, startPositionMs: Long) {
+        artworkJob?.cancel()
+        val requestedQueue = (newQueue ?: _playerState.value.queue).map(com.example.auramusic.data.TrackMapping::sanitize)
+        val queue = (if (requestedQueue.any { it.id == track.id }) requestedQueue else requestedQueue + track).distinctBy { it.id }
+        val startPosition = startPositionMs.coerceIn(0, track.durationMs.coerceAtLeast(0))
         val index = queue.indexOfFirst { it.id == track.id }.coerceAtLeast(0)
 
         _playerState.update {
             it.copy(
                 currentTrack = track,
+                playbackError = null,
                 queue = queue,
                 currentIndex = index,
-                currentPositionMs = 0L,
+                currentPositionMs = startPosition,
                 bufferedPositionMs = 0L,
                 durationMs = track.durationMs,
+                activeStreamingQualityBadge = "Loading audio",
+                activeStreamingQualityTitle = "Detecting audio format",
                 isPlaying = true
             )
         }
         _playbackProgress.value = PlaybackProgress(
-            currentPositionMs = 0L,
+            currentPositionMs = startPosition,
             bufferedPositionMs = 0L,
             durationMs = track.durationMs
         )
@@ -320,7 +407,8 @@ class MusicPlayerManager(private val context: Context) {
                     .setMediaMetadata(mediaMetadata)
                     .build()
 
-                exoPlayer.setMediaItem(mediaItem)
+                exoPlayer.setMediaItem(mediaItem, startPosition)
+                exoPlayer.repeatMode = if (_playerState.value.isRepeatOne) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
                 exoPlayer.prepare()
                 try {
                     exoPlayer.playbackParameters = androidx.media3.common.PlaybackParameters(_playerState.value.playbackSpeed)
@@ -341,16 +429,39 @@ class MusicPlayerManager(private val context: Context) {
 
                 exoPlayer.play()
                 startMediaPlaybackService()
+                artworkJob = scope.launch {
+                    val artwork = com.example.auramusic.network.ArtworkResolver.resolve(
+                        context, track.title, track.artist, track.coverArtUrl, effectiveUri.toString()
+                    ) ?: return@launch
+                    if (_playerState.value.currentTrack?.id != track.id) return@launch
+                    _playerState.update { state -> state.copy(
+                        currentTrack = state.currentTrack?.copy(coverArtUrl = artwork),
+                        queue = state.queue.map { if (it.id == track.id) it.copy(coverArtUrl = artwork) else it }
+                    ) }
+                    val current = exoPlayer.currentMediaItem ?: return@launch
+                    exoPlayer.replaceMediaItem(exoPlayer.currentMediaItemIndex, current.buildUpon()
+                        .setMediaMetadata(current.mediaMetadata.buildUpon().setArtworkUri(Uri.parse(artwork)).build()).build())
+                }
             } catch (e: Exception) {
-                // Fallback to simulated playback ticker if stream error occurs
-                startTicker()
-                startMediaPlaybackService()
+                reportPlaybackError("Couldn't open this song. Retry or skip to another song.")
             }
         } else {
-            // Simulated local playback progression with exact audio timings
-            startTicker()
-            startMediaPlaybackService()
+            exoPlayer.stop()
+            exoPlayer.clearMediaItems()
+            reportPlaybackError("This song has no playable audio. Try another song.")
         }
+    }
+
+    private fun reportPlaybackError(message: String) {
+        stopTicker()
+        _playerState.update { it.copy(isPlaying = false, playbackError = message) }
+    }
+
+    fun dismissPlaybackError() { _playerState.update { it.copy(playbackError = null) } }
+
+    fun retryPlayback() {
+        val track = _playerState.value.currentTrack ?: return
+        playTrack(track)
     }
 
     fun setPlaybackSpeed(speed: Float) {
@@ -387,21 +498,21 @@ class MusicPlayerManager(private val context: Context) {
     }
 
     fun pause() {
-        if (exoPlayer.isPlaying) {
-            exoPlayer.pause()
-        }
+        trackTransitionJob?.cancel()
+        trackResolutionJob?.cancel()
+        exoPlayer.pause()
         _playerState.update { it.copy(isPlaying = false) }
         stopTicker()
+        saveListeningSession()
     }
 
     fun resume() {
         val track = _playerState.value.currentTrack
-        if (track != null && track.audioUrl.isNotBlank() && exoPlayer.playbackState != Player.STATE_IDLE) {
+        if (track != null && !com.example.auramusic.data.TrackMapping.needsResolution(track) && track.audioUrl.isNotBlank() && exoPlayer.playbackState != Player.STATE_IDLE) {
             exoPlayer.play()
             startMediaPlaybackService()
         } else {
-            _playerState.update { it.copy(isPlaying = true) }
-            startTicker()
+            if (track != null) playTrack(track, _playerState.value.queue, _playbackProgress.value.currentPositionMs)
         }
     }
 
@@ -417,21 +528,25 @@ class MusicPlayerManager(private val context: Context) {
         }
         _playbackProgress.update { it.copy(currentPositionMs = positionMs) }
         _playerState.update { it.copy(currentPositionMs = positionMs) }
+        saveListeningSession()
     }
 
     fun skipNext() {
+        trackTransitionJob?.cancel()
         val state = _playerState.value
         if (state.queue.isEmpty()) return
 
-        val nextIndex = if (state.isShuffle) {
+        val requestedNext = state.queue.indexOfFirst { it.id == state.queuedNextId }
+        val nextIndex = if (requestedNext >= 0) requestedNext else if (state.isShuffle) {
             state.queue.indices.random()
         } else {
             (state.currentIndex + 1) % state.queue.size
         }
         val nextTrack = state.queue[nextIndex]
+        _playerState.update { it.copy(queuedNextId = null) }
 
         if (state.isCrossfadeEnabled && exoPlayer.isPlaying) {
-            scope.launch {
+            trackTransitionJob = scope.launch {
                 val steps = 5
                 for (i in (steps - 1) downTo 1) {
                     try { exoPlayer.volume = (i.toFloat() / steps.toFloat()) } catch (ignored: Exception) {}
@@ -445,6 +560,7 @@ class MusicPlayerManager(private val context: Context) {
     }
 
     fun skipPrevious() {
+        trackTransitionJob?.cancel()
         val state = _playerState.value
         if (state.queue.isEmpty()) return
 
@@ -459,7 +575,7 @@ class MusicPlayerManager(private val context: Context) {
         val prevTrack = state.queue[prevIndex]
 
         if (state.isCrossfadeEnabled && exoPlayer.isPlaying) {
-            scope.launch {
+            trackTransitionJob = scope.launch {
                 val steps = 5
                 for (i in (steps - 1) downTo 1) {
                     try { exoPlayer.volume = (i.toFloat() / steps.toFloat()) } catch (ignored: Exception) {}
@@ -478,6 +594,7 @@ class MusicPlayerManager(private val context: Context) {
 
     fun toggleRepeat() {
         _playerState.update { it.copy(isRepeatOne = !it.isRepeatOne) }
+        exoPlayer.repeatMode = if (_playerState.value.isRepeatOne) Player.REPEAT_MODE_ONE else Player.REPEAT_MODE_OFF
     }
 
     fun toggleTravelMode() {
@@ -490,6 +607,12 @@ class MusicPlayerManager(private val context: Context) {
 
     fun setAutoQualityEnabled(enabled: Boolean) {
         _playerState.update { it.copy(isAutoQualityEnabled = enabled) }
+    }
+
+    private fun updateActualAudioQuality() {
+        val format = exoPlayer.audioFormat ?: return
+        val label = AudioQuality.describe(format.sampleMimeType, format.bitrate, format.sampleRate)
+        _playerState.update { it.copy(activeStreamingQualityBadge = label, activeStreamingQualityTitle = label) }
     }
 
     fun applyAdaptiveQuality(
@@ -521,28 +644,25 @@ class MusicPlayerManager(private val context: Context) {
         }
 
         // Dynamically update stream request headers
-        cacheManager.updateStreamingQualityHeaders(autoQuality.targetBitrateKbps)
         equalizerManager.onStreamingQualityAdapted(bitrateMode.label)
 
         _playerState.update {
             it.copy(
                 bitrateMode = bitrateMode,
-                activeStreamingQualityBadge = autoQuality.shortBadge,
-                activeStreamingQualityTitle = autoQuality.title,
                 signalStrengthPercent = signalPercent,
                 linkBandwidthKbps = bandwidthKbps,
                 isSignalFluctuating = isFluctuating,
-                autoQualitySwitchNote = if (fluctuationNote.isNotBlank()) fluctuationNote else autoQuality.description
+                autoQualitySwitchNote = "Auto bitrate preference; actual quality depends on the stream."
             )
         }
     }
 
     fun setManualQuality(qualityTitle: String) {
         val (mode, badge, title, kbps) = when (qualityTitle) {
-            "Spotify High (320kbps)" -> listOf(AudioBitrateMode.HIGH_QUALITY, "HQ 320K", "Spotify High (320kbps)", 320)
-            "YouTube Music Opus (256kbps)" -> listOf(AudioBitrateMode.BALANCED, "OPUS 256K", "YouTube Music Opus (256kbps)", 256)
+            "Spotify High (320kbps)", "High (up to 320kbps)" -> listOf(AudioBitrateMode.HIGH_QUALITY, "HQ", "High (up to 320kbps)", 320)
+            "YouTube Music Opus (256kbps)", "Balanced (up to 256kbps)" -> listOf(AudioBitrateMode.BALANCED, "Balanced", "Balanced (up to 256kbps)", 256)
             "Data Saver (128kbps / Roaming)", "Data Saver (Roaming Auto)" -> listOf(AudioBitrateMode.ADAPTIVE_ROAMING, "SAVER 128K", "Data Saver (128kbps)", 128)
-            else -> listOf(AudioBitrateMode.LOSSLESS_MASTER, "24-BIT FLAC", "Lossless Master (24-bit FLAC)", 1411)
+            else -> listOf(AudioBitrateMode.LOSSLESS_MASTER, "Original", "Original quality", Int.MAX_VALUE / 1000)
         }
 
         val targetKbps = kbps as Int
@@ -559,15 +679,12 @@ class MusicPlayerManager(private val context: Context) {
             // Safe fallback
         }
 
-        cacheManager.updateStreamingQualityHeaders(targetKbps)
 
         _playerState.update {
             it.copy(
                 isAutoQualityEnabled = false,
                 bitrateMode = targetMode,
-                activeStreamingQualityBadge = targetBadge,
-                activeStreamingQualityTitle = targetTitle,
-                autoQualitySwitchNote = "Manual Fixed: $targetTitle"
+                autoQualitySwitchNote = "Preference: $targetTitle. Actual quality depends on the stream."
             )
         }
     }
@@ -695,6 +812,9 @@ class MusicPlayerManager(private val context: Context) {
 
     fun removeFromQueue(trackId: String) {
         val state = _playerState.value
+        val removedIndex = state.queue.indexOfFirst { it.id == trackId }
+        if (removedIndex < 0) return
+        removedEntry = state.queue[removedIndex] to removedIndex
         val newQueue = state.queue.filter { it.id != trackId }
         if (newQueue.isEmpty()) {
             pause()
@@ -707,6 +827,7 @@ class MusicPlayerManager(private val context: Context) {
                     currentPositionMs = 0L
                 )
             }
+            _playerState.update { it.copy(canUndoQueueRemoval = true) }
             return
         }
         val isRemovingCurrent = state.currentTrack?.id == trackId
@@ -726,7 +847,47 @@ class MusicPlayerManager(private val context: Context) {
         if (isRemovingCurrent && nextTrack != null) {
             playTrack(nextTrack, newQueue)
         }
+        _playerState.update { it.copy(canUndoQueueRemoval = true) }
     }
+
+    fun moveQueueItem(from: Int, to: Int) {
+        val state = _playerState.value
+        val queue = QueueEditor.move(state.queue, from, to)
+        _playerState.update { it.copy(queue = queue, currentIndex = queue.indexOfFirst { track -> track.id == state.currentTrack?.id }.coerceAtLeast(0)) }
+    }
+
+    fun playNext(track: Track) {
+        val state = _playerState.value
+        val queue = QueueEditor.playNext(state.queue, state.currentTrack?.id, track)
+        _playerState.update { it.copy(queue = queue, queuedNextId = track.id.takeIf { it != state.currentTrack?.id }, currentIndex = queue.indexOfFirst { item -> item.id == state.currentTrack?.id }.coerceAtLeast(0)) }
+    }
+
+    fun undoQueueRemoval() {
+        val (track, index) = removedEntry ?: return
+        val state = _playerState.value
+        val queue = state.queue.filterNot { it.id == track.id }.toMutableList().apply { add(index.coerceIn(0, size), track) }
+        _playerState.update { it.copy(queue = queue, currentTrack = it.currentTrack ?: track,
+            currentIndex = queue.indexOfFirst { entry -> entry.id == (state.currentTrack?.id ?: track.id) }, canUndoQueueRemoval = false) }
+        removedEntry = null
+    }
+
+    fun setNormalizationEnabled(enabled: Boolean) {
+        normalizationProcessor.enabled = enabled
+        playbackPrefs.edit().putBoolean("normalize", enabled).apply()
+    }
+
+    fun updateTrackMetadata(track: Track) {
+        artworkJob?.cancel()
+        _playerState.update { state -> state.copy(currentTrack = if (state.currentTrack?.id == track.id) track else state.currentTrack,
+            queue = state.queue.map { if (it.id == track.id) track else it }) }
+        if (exoPlayer.currentMediaItem?.mediaId == track.id) {
+            val item = exoPlayer.currentMediaItem!!
+            exoPlayer.replaceMediaItem(exoPlayer.currentMediaItemIndex, item.buildUpon().setMediaMetadata(item.mediaMetadata.buildUpon()
+                .setTitle(track.title).setArtist(track.artist).setAlbumTitle(track.album).setArtworkUri(Uri.parse(track.coverArtUrl)).build()).build())
+        }
+    }
+
+    fun saveListeningSession() { sessionStore.save(_playerState.value, _playbackProgress.value) }
 
     private var sleepTimerJob: Job? = null
 
@@ -788,32 +949,7 @@ class MusicPlayerManager(private val context: Context) {
                                 if (exoPlayer.volume < 1.0f) exoPlayer.volume = 1.0f
                             }
                         }
-                    } else {
-                        // Simulated progression
-                        val currentProg = _playbackProgress.value
-                        val speedFactor = state.playbackSpeed
-                        val newPos = (currentProg.currentPositionMs + (250 * speedFactor).toLong())
-                        val simDuration = state.durationMs.coerceAtLeast(currentProg.durationMs)
-                        val simulatedBuffer = (newPos + 60000L).coerceAtMost(simDuration)
 
-                        if (!hasRecordedCurrentPlay && newPos >= 15000L && state.currentTrack != null) {
-                            hasRecordedCurrentPlay = true
-                            favoritesManager.recordPlay(state.currentTrack.id)
-                        }
-
-                        if (newPos >= simDuration && simDuration > 0) {
-                            if (state.isRepeatOne) {
-                                _playbackProgress.value = PlaybackProgress(currentPositionMs = 0L, durationMs = simDuration)
-                            } else {
-                                skipNext()
-                            }
-                        } else {
-                            _playbackProgress.value = PlaybackProgress(
-                                currentPositionMs = newPos,
-                                bufferedPositionMs = simulatedBuffer,
-                                durationMs = simDuration
-                            )
-                        }
                     }
                 }
             }
@@ -826,6 +962,10 @@ class MusicPlayerManager(private val context: Context) {
     }
 
     fun release() {
+        saveListeningSession()
+        artworkJob?.cancel()
+        sleepTimerJob?.cancel()
+        scope.cancel()
         stopTicker()
         try {
             audioManager?.unregisterAudioDeviceCallback(audioDeviceCallback)
@@ -839,5 +979,6 @@ class MusicPlayerManager(private val context: Context) {
         }
         equalizerManager.release()
         exoPlayer.release()
+        if (instance === this) instance = null
     }
 }

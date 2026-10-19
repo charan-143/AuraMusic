@@ -54,6 +54,19 @@ import com.example.auramusic.theme.MonochromeSurface
 import com.example.auramusic.theme.MonochromeSurfaceContainer
 import com.example.auramusic.theme.MonochromeWhite
 import com.example.auramusic.theme.PixelMotion
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.material.icons.filled.DragHandle
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.customActions
+import androidx.compose.ui.semantics.CustomAccessibilityAction
+import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.gestures.scrollBy
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.launch
 
 @Composable
 fun PixelQueueSheet(
@@ -65,9 +78,17 @@ fun PixelQueueSheet(
     onShuffleClick: () -> Unit,
     onClearQueue: () -> Unit = {},
     onRemoveTrack: (Track) -> Unit = {},
+    onMove: (Int, Int) -> Unit = { _, _ -> },
+    onMoreTrack: (Track) -> Unit = {},
+    canUndo: Boolean = false,
+    onUndo: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
     val haptic = LocalHapticFeedback.current
+    val latestQueue by rememberUpdatedState(queue)
+    val latestMove by rememberUpdatedState(onMove)
+    val queueListState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
 
     var dragOffsetY by remember { mutableStateOf(0f) }
     val animatedOffsetY by animateFloatAsState(
@@ -224,7 +245,10 @@ fun PixelQueueSheet(
         Spacer(modifier = Modifier.height(10.dp))
 
         // Queue list items
+        Text("Long-press a handle to reorder", color = MonochromeSilver, fontSize = 12.sp, modifier = Modifier.padding(horizontal = 24.dp))
+        if (canUndo) TextButton(onClick = onUndo) { Text("Undo removal") }
         LazyColumn(
+            state = queueListState,
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(1f, fill = false)
@@ -232,20 +256,47 @@ fun PixelQueueSheet(
         ) {
             itemsIndexed(
                 items = queue,
-                key = { index, track -> "${track.id}_$index" }
+                key = { _, track -> track.id }
             ) { index, track ->
                 val isSelected = track.id == currentTrackId
+                var rowHeight by remember { mutableStateOf(64f) }
+                var dragDistance by remember { mutableStateOf(0f) }
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
-                    modifier = Modifier.fillMaxWidth()
+                    modifier = Modifier.fillMaxWidth().onSizeChanged { rowHeight = it.height.toFloat().coerceAtLeast(1f) }
                 ) {
+                    Icon(Icons.Default.DragHandle, contentDescription = "Reorder ${track.title}", tint = MonochromeSilver,
+                        modifier = Modifier.size(40.dp).semantics(mergeDescendants = true) {
+                            customActions = listOf(
+                                CustomAccessibilityAction("Move up") { if (index > 0) onMove(index, index - 1); true },
+                                CustomAccessibilityAction("Move down") { if (index < queue.lastIndex) onMove(index, index + 1); true })
+                        }.pointerInput(track.id) {
+                            detectDragGesturesAfterLongPress(
+                                onDragStart = { dragDistance = 0f }, onDragEnd = { dragDistance = 0f }, onDragCancel = { dragDistance = 0f }
+                            ) { change, amount ->
+                                change.consume()
+                                dragDistance += amount.y
+                                val from = latestQueue.indexOfFirst { it.id == track.id }
+                                val step = if (dragDistance > rowHeight) 1 else if (dragDistance < -rowHeight) -1 else 0
+                                val to = from + step
+                                val visible = queueListState.layoutInfo.visibleItemsInfo.firstOrNull { it.key == track.id }
+                                if (visible != null && ((amount.y > 0 && visible.offset + rowHeight * 2 > queueListState.layoutInfo.viewportEndOffset) ||
+                                    (amount.y < 0 && visible.offset < queueListState.layoutInfo.viewportStartOffset + rowHeight))) {
+                                    scope.launch { queueListState.scrollBy(amount.y.coerceIn(-30f, 30f)) }
+                                }
+                                if (step != 0 && from >= 0 && to in latestQueue.indices) {
+                                    latestMove(from, to)
+                                    dragDistance -= step * rowHeight
+                                }
+                            }
+                        })
                     Box(modifier = Modifier.weight(1f)) {
                         PixelTrackTile(
                             track = track,
                             isSelected = isSelected,
                             isPlaying = isPlaying,
                             onClick = { onTrackClick(track) },
-                            onMoreClick = { onRemoveTrack(track) }
+                            onMoreClick = { onMoreTrack(track) }
                         )
                     }
 

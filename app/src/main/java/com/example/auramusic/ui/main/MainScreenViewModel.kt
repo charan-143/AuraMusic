@@ -32,7 +32,10 @@ import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class MainScreenViewModel(application: Application) : AndroidViewModel(application) {
+class MainScreenViewModel @JvmOverloads constructor(
+    application: Application,
+    private val loadCatalogOnStart: Boolean = true
+) : AndroidViewModel(application) {
 
     private val prefs = application.getSharedPreferences("aura_music_settings", Context.MODE_PRIVATE)
 
@@ -42,6 +45,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     private val playlistRepository = PlaylistRepository(application, audioRepository)
     private val recommendationEngine = RecommendationEngine(audioRepository, application)
     private val onlineSearchService = OnlineMusicSearchService()
+    private val trackEdits = com.example.auramusic.data.TrackEdits(application)
 
     val playerState: StateFlow<PlayerState> = playerManager.playerState
     val playbackProgress: StateFlow<PlaybackProgress> = playerManager.playbackProgress
@@ -66,7 +70,12 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
 
     // Audio Streaming Quality Preference: defaults to Auto (Signal Adaptive)
     private val _streamingQuality = MutableStateFlow(
-        prefs.getString("pref_streaming_quality", "Auto (Signal Adaptive)") ?: "Auto (Signal Adaptive)"
+        when (val saved = prefs.getString("pref_streaming_quality", "Auto (Signal Adaptive)")) {
+            "Lossless Master (24-bit FLAC)" -> "Original quality"
+            "Spotify High (320kbps)" -> "High (up to 320kbps)"
+            "YouTube Music Opus (256kbps)" -> "Balanced (up to 256kbps)"
+            else -> saved ?: "Auto (Signal Adaptive)"
+        }
     )
     val streamingQuality: StateFlow<String> = _streamingQuality.asStateFlow()
 
@@ -109,6 +118,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
 
     // Clean dynamic tracks & albums (no hardcoded presets)
     private val _allTracks = MutableStateFlow<List<Track>>(emptyList())
+    val allTracks = _allTracks.asStateFlow()
     private val _allAlbums = MutableStateFlow<List<Album>>(emptyList())
     val allAlbums: StateFlow<List<Album>> = _allAlbums.asStateFlow()
 
@@ -151,23 +161,53 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
 
     // Offline Downloads
     val downloadStates = playerManager.offlineDownloadManager.downloadStates
+    val downloadItems = playerManager.offlineDownloadManager.items
+    val downloadStorageBytes = playerManager.offlineDownloadManager.storageBytes
+    val wifiOnlyDownloads = playerManager.offlineDownloadManager.wifiOnly
+    private val _normalizationEnabled = MutableStateFlow(playerManager.normalizationProcessor.enabled)
+    val normalizationEnabled = _normalizationEnabled.asStateFlow()
+    private val _actionTrack = MutableStateFlow<Track?>(null)
+    val actionTrack = _actionTrack.asStateFlow()
+    fun openTrackActions(track: Track) { _actionTrack.value = track }
+    fun closeTrackActions() { _actionTrack.value = null }
+    fun setNormalization(enabled: Boolean) { playerManager.setNormalizationEnabled(enabled); _normalizationEnabled.value = enabled }
+    fun setWifiOnlyDownloads(enabled: Boolean) = playerManager.offlineDownloadManager.setWifiOnly(enabled)
+    fun pauseDownload(id: String) = playerManager.offlineDownloadManager.pauseDownload(id)
+    fun resumeDownload(id: String) = playerManager.offlineDownloadManager.resumeDownload(id)
+    fun deleteDownloads(ids: Set<String>) = playerManager.offlineDownloadManager.deleteDownloads(ids)
+    fun playNext(track: Track) = playerManager.playNext(track)
+    fun moveQueueItem(from: Int, to: Int) = playerManager.moveQueueItem(from, to)
+    fun undoQueueRemoval() = playerManager.undoQueueRemoval()
+    fun exportPlaylistBackup(): String = playlistRepository.exportBackup()
+    fun importPlaylistBackup(text: String): Int = playlistRepository.importBackup(text)
+    suspend fun searchCoverCandidates(title: String, artist: String): List<Track> = onlineSearchService.searchOnline("$title $artist").tracks.distinctBy { it.coverArtUrl }.take(8)
+
+    fun saveTrackEdits(track: Track) {
+        com.example.auramusic.data.TrackEdits(getApplication()).save(track)
+        audioRepository.updateTrack(track)
+        updateCatalog()
+        _onlineSearchTracks.value = _onlineSearchTracks.value.map { if (it.id == track.id) track else it }
+        _recommendations.value = _recommendations.value.map { section -> section.copy(tracks = section.tracks.map { if (it.id == track.id) track else it },
+            albums = section.albums.map { album -> album.copy(tracks = album.tracks.map { if (it.id == track.id) track else it }) }) }
+        playlistRepository.updateTrack(track)
+        playerManager.updateTrackMetadata(track)
+        playerManager.offlineDownloadManager.updateTrackMetadata(track)
+        _selectedAlbum.value = _selectedAlbum.value?.let { album -> album.copy(tracks = album.tracks.map { if (it.id == track.id) track else it }) }
+    }
     fun downloadTrack(track: Track) {
-        audioRepository.addTracks(listOf(track))
-        _allTracks.value = audioRepository.getMultiSourceTracks()
+        updateCatalog(listOf(track))
         playerManager.offlineDownloadManager.downloadTrack(track)
     }
     fun deleteDownloadedTrack(trackId: String) { playerManager.offlineDownloadManager.deleteDownload(trackId) }
     fun isTrackDownloaded(trackId: String): Boolean = playerManager.offlineDownloadManager.isDownloaded(trackId)
 
-    fun loadDeviceTracks() {
-        viewModelScope.launch(Dispatchers.IO) {
+    fun loadDeviceTracks(): Job = viewModelScope.launch(Dispatchers.IO) {
             try {
                 val tracks = audioRepository.loadDeviceAudio()
                 if (tracks.isNotEmpty()) {
-                    _allTracks.value = audioRepository.getMultiSourceTracks()
+                    withContext(Dispatchers.Main) { updateCatalog() }
                 }
             } catch (ignored: Exception) {}
-        }
     }
 
     // Library Filters & Smart Auto-Playlists
@@ -223,8 +263,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         "All Tracks",
         "Albums",
         "My Playlists",
-        "Spotify",
-        "YouTube Music",
+        "JioSaavn",
         "Lossless FLAC",
         "Device Library"
     )
@@ -251,7 +290,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
         when (category) {
             "All Tracks", "All", "My Playlists" -> pool
             "Albums" -> emptyList()
-            "Spotify" -> pool.filter { it.source == com.example.auramusic.model.StreamingSource.SPOTIFY }
+            "JioSaavn" -> pool.filter { it.source == StreamingSource.JIOSAAVN }
             "YouTube Music" -> pool.filter { it.source == com.example.auramusic.model.StreamingSource.YOUTUBE_MUSIC }
             "Lossless FLAC" -> pool.filter { it.isLossless }
             else -> pool.filter {
@@ -282,7 +321,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
 
         when (category) {
             "All Tracks", "All", "Albums" -> pool
-            "Spotify" -> pool.filter { it.source.displayName.contains("Spotify", ignoreCase = true) }
+            "JioSaavn" -> pool.filter { it.source == StreamingSource.JIOSAAVN }
             "YouTube Music" -> pool.filter { it.source.displayName.contains("YouTube", ignoreCase = true) }
             "Lossless FLAC" -> pool.filter { it.isLossless }
             else -> pool
@@ -326,14 +365,17 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     }
 
     init {
+        viewModelScope.launch {
+            _allTracks.collect { playlistRepository.refreshTracks() }
+        }
         // Build initial discovery recommendations
         refreshRecommendations(null)
 
         // Fetch dynamic trending music from online catalog
-        loadTrendingMusic()
+        if (loadCatalogOnStart) loadTrendingMusic()
 
         // Load physical audio files from device storage (Download, Music, etc.)
-        loadDeviceTracks()
+        if (loadCatalogOnStart) loadDeviceTracks()
 
         // Initialize Audio Streaming Quality mode
         val initialQuality = _streamingQuality.value
@@ -399,23 +441,33 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
             }
         }
 
-        // Scan device storage for any local audio files
-        loadDeviceTracks()
+    }
+
+    /** Keep displayed discovery data in the same catalog used by playback and library actions. */
+    private fun updateCatalog(tracks: List<Track> = emptyList(), albums: List<Album> = emptyList()) {
+        val displayedAlbums = _recommendations.value.flatMap { it.albums }
+        audioRepository.addAlbums(_allAlbums.value + displayedAlbums + albums)
+        audioRepository.addTracks(_allTracks.value + _recommendations.value.flatMap { it.tracks } +
+            (displayedAlbums + albums).flatMap { it.tracks } + tracks)
+        _allTracks.value = audioRepository.getMultiSourceTracks()
+        _allAlbums.value = audioRepository.getAllAlbums()
     }
 
     fun loadTrendingMusic() {
         viewModelScope.launch {
             try {
                 val trending = onlineSearchService.fetchTrendingMusic()
-                if (trending.tracks.isNotEmpty() || trending.albums.isNotEmpty()) {
-                    _allTracks.value = (_allTracks.value + trending.tracks).distinctBy { it.id }
-                    _allAlbums.value = (_allAlbums.value + trending.albums).distinctBy { it.id }
-                    refreshRecommendations(playerState.value.currentTrack)
-                }
+                applyDiscoveryResults(trending)
             } catch (e: Exception) {
                 // Fallback handled in RecommendationEngine
             }
         }
+    }
+
+    internal fun applyDiscoveryResults(result: com.example.auramusic.network.OnlineSearchResult) {
+        if (result.tracks.isEmpty() && result.albums.isEmpty()) return
+        updateCatalog(result.tracks, result.albums)
+        refreshRecommendations(playerState.value.currentTrack)
     }
 
     fun rescanDeviceAudio() {
@@ -460,7 +512,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                             id = "rec_mood_${mood.lowercase().replace(" ", "_")}",
                             title = "$mood Curation",
                             subtitle = "Harmonically tuned algorithmic flow matching your $mood vibe",
-                            source = effectiveActiveTrack?.source ?: com.example.auramusic.model.StreamingSource.SPOTIFY,
+                            source = effectiveActiveTrack?.source ?: com.example.auramusic.model.StreamingSource.JIOSAAVN,
                             albums = emptyList(),
                             tracks = moodTracks.take(8)
                         )
@@ -471,7 +523,9 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
             } else {
                 rawSections
             }
-            _recommendations.value = updatedSections
+            val sections = updatedSections.map { section -> section.copy(tracks = section.tracks.map { trackEdits.apply(it) },
+                albums = section.albums.map { album -> album.copy(tracks = album.tracks.map { trackEdits.apply(it) }) }) }
+            withContext(Dispatchers.Main) { _recommendations.value = sections }
         }
     }
 
@@ -496,8 +550,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
 
     // Playback and Selection
     fun playTrack(track: Track, newQueue: List<Track>? = null) {
-        audioRepository.addTracks(listOf(track))
-        _allTracks.value = audioRepository.getMultiSourceTracks()
+        updateCatalog(listOf(track) + newQueue.orEmpty())
         val currentQueue = newQueue ?: if (track.isLocal || track.isCachedOffline || track.source == StreamingSource.LOCAL_STORAGE) {
             filteredTracks.value.ifEmpty { listOf(track) }
         } else {
@@ -520,7 +573,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
             viewModelScope.launch {
                 val fullTracks = onlineSearchService.fetchAlbumTracks(album.id)
                 if (fullTracks.isNotEmpty()) {
-                    _selectedAlbum.value = album.copy(tracks = fullTracks)
+                    _selectedAlbum.value = album.copy(tracks = fullTracks.map { trackEdits.apply(it) })
                 }
             }
         }
@@ -618,7 +671,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
             artist = if (playlist.isCustomAlbum) "Custom Album" else "User Playlist",
             coverArtUrl = playlist.coverArtUrl,
             year = "2024",
-            source = playlist.tracks.firstOrNull()?.source ?: com.example.auramusic.model.StreamingSource.SPOTIFY,
+            source = playlist.tracks.firstOrNull()?.source ?: com.example.auramusic.model.StreamingSource.JIOSAAVN,
             qualityBadge = if (playlist.isCustomAlbum) "CUSTOM ALBUM" else "PLAYLIST",
             isLossless = playlist.tracks.any { it.isLossless },
             description = playlist.description,
@@ -636,7 +689,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                 _selectedCategory.value = "All Tracks"
             }
             PixelNavTab.SEARCH -> {
-                // Focus search / discovery mode
+                _selectedCategory.value = "All Tracks"
             }
             PixelNavTab.LIBRARY -> {
                 _selectedCategory.value = "My Playlists"
@@ -655,6 +708,9 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     fun setSearchQuery(query: String) {
         _searchQuery.value = query
         searchJob?.cancel()
+        _onlineSearchTracks.value = emptyList()
+        _onlineSearchAlbums.value = emptyList()
+        _isSearchingOnline.value = query.trim().length >= 2
 
         if (query.isNotBlank()) {
             if (_currentTab.value != PixelNavTab.SEARCH) {
@@ -667,12 +723,12 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
                     _isSearchingOnline.value = true
                     try {
                         val result = onlineSearchService.searchOnline(query.trim())
-                        _onlineSearchTracks.value = result.tracks
+                        _onlineSearchTracks.value = result.tracks.map { trackEdits.apply(it) }
                         _onlineSearchAlbums.value = result.albums
                     } catch (e: Exception) {
                         // ignore network error
                     } finally {
-                        _isSearchingOnline.value = false
+                        if (_searchQuery.value == query) _isSearchingOnline.value = false
                     }
                 }
             } else {
@@ -699,6 +755,8 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
     fun toggleShuffle() = playerManager.toggleShuffle()
 
     fun toggleRepeat() = playerManager.toggleRepeat()
+    fun retryPlayback() = playerManager.retryPlayback()
+    fun dismissPlaybackError() = playerManager.dismissPlaybackError()
 
     fun toggleTravelMode() = playerManager.toggleTravelMode()
 
@@ -748,8 +806,7 @@ class MainScreenViewModel(application: Application) : AndroidViewModel(applicati
 
     // Favorites
     fun toggleFavorite(track: Track): Boolean {
-        audioRepository.addTracks(listOf(track))
-        _allTracks.value = audioRepository.getMultiSourceTracks()
+        updateCatalog(listOf(track))
         playerManager.favoritesManager.toggleFavorite(track.id)
         return playlistRepository.toggleFavorite(track)
     }

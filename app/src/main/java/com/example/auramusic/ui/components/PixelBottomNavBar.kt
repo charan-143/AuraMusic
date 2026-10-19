@@ -22,6 +22,7 @@ import androidx.compose.material.icons.filled.Home
 import androidx.compose.material.icons.filled.LibraryMusic
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Surface
@@ -50,85 +51,14 @@ enum class PixelNavTab(val label: String, val icon: ImageVector) {
 }
 
 @Composable
-fun PixelBottomNavBar(
-    selectedTab: PixelNavTab,
-    onTabSelected: (PixelNavTab) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val haptic = LocalHapticFeedback.current
-    val colors = PixelTheme.colors
-
-    Surface(
-        color = colors.bottomNavBackground,
-        shadowElevation = 0.dp,
-        tonalElevation = 0.dp,
-        modifier = modifier.fillMaxWidth()
-    ) {
-        Column(modifier = Modifier.fillMaxWidth()) {
-            // Subtle 0.5dp top border separating nav from content
-            HorizontalDivider(
-                thickness = 0.5.dp,
-                color = colors.outlineVariant
-            )
-
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .padding(horizontal = 8.dp, vertical = 6.dp),
-                horizontalArrangement = Arrangement.SpaceAround,
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                PixelNavTab.entries.forEach { tab ->
-                    val isSelected = tab == selectedTab
-                    val scale by animateFloatAsState(
-                        targetValue = if (isSelected) 1.05f else 1.0f,
-                        animationSpec = PixelMotion.BouncySpring,
-                        label = "tabScale_${tab.name}"
-                    )
-
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier
-                            .scale(scale)
-                            .clip(RoundedCornerShape(16.dp))
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null
-                            ) {
-                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                                onTabSelected(tab)
-                            }
-                            .padding(horizontal = 10.dp, vertical = 4.dp)
-                    ) {
-                        // Google Pixel Expressive Squircle Pill Indicator
-                        Box(
-                            contentAlignment = Alignment.Center,
-                            modifier = Modifier
-                                .width(56.dp)
-                                .height(32.dp)
-                                .clip(RoundedCornerShape(16.dp))
-                                .background(if (isSelected) colors.activePillBackground else Color.Transparent)
-                        ) {
-                            Icon(
-                                imageVector = tab.icon,
-                                contentDescription = tab.label,
-                                tint = if (isSelected) colors.activePillText else colors.textSecondary,
-                                modifier = Modifier.size(20.dp)
-                            )
-                        }
-
-                        Spacer(modifier = Modifier.height(3.dp))
-
-                        Text(
-                            text = tab.label,
-                            fontSize = 11.sp,
-                            fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Medium,
-                            color = if (isSelected) colors.textPrimary else colors.textTertiary
-                        )
-                    }
-                }
-            }
+fun PixelBottomNavBar(selectedTab: PixelNavTab, onTabSelected: (PixelNavTab) -> Unit, modifier: Modifier = Modifier) {
+    val c = PixelTheme.colors
+    androidx.compose.material3.NavigationBar(modifier=modifier,containerColor=c.bottomNavBackground, tonalElevation=0.dp) {
+        PixelNavTab.entries.forEach { tab ->
+            NavigationBarItem(selected=selectedTab==tab, onClick={onTabSelected(tab)},
+                icon={Icon(tab.icon,null)},label={Text(tab.label,fontSize=12.sp)},
+                colors=androidx.compose.material3.NavigationBarItemDefaults.colors(selectedIconColor=c.activePillText,
+                    selectedTextColor=c.textPrimary,indicatorColor=c.activePillBackground,unselectedIconColor=c.textSecondary,unselectedTextColor=c.textSecondary))
         }
     }
 }

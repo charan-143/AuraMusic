@@ -69,16 +69,11 @@ fun PixelMiniPlayer(
         modifier = modifier
             .fillMaxWidth()
             .padding(horizontal = 16.dp, vertical = 8.dp)
-            .shadow(
-                elevation = 16.dp,
-                shape = RoundedCornerShape(24.dp),
-                ambientColor = if (colors.isDark) Color.White.copy(alpha = 0.08f) else Color.Black.copy(alpha = 0.06f)
-            )
             .clip(RoundedCornerShape(24.dp))
             .background(colors.miniPlayerBackground)
-            .border(1.dp, colors.outlineVariant, RoundedCornerShape(24.dp))
+            
             .clickable { onExpandClick() }
-            .padding(horizontal = 14.dp, vertical = 10.dp)
+            .padding(horizontal = 12.dp, vertical = 10.dp)
     ) {
         Row(
             modifier = Modifier.fillMaxWidth(),
@@ -97,7 +92,7 @@ fun PixelMiniPlayer(
                     isPlaying = isPlaying,
                     cornerRadius = 14.dp,
                     showVinylGrooves = false,
-                    titleFallback = track.title,
+                    titleFallback = track.title, artist = track.artist, audioUri = track.audioUrl,
                     modifier = Modifier.size(48.dp)
                 )
             }
@@ -109,7 +104,7 @@ fun PixelMiniPlayer(
                 Text(
                     text = track.title,
                     color = colors.textPrimary,
-                    fontSize = 14.sp,
+                    fontSize = 15.sp,
                     fontWeight = FontWeight.SemiBold,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis
@@ -132,7 +127,7 @@ fun PixelMiniPlayer(
                 Box(
                     contentAlignment = Alignment.Center,
                     modifier = Modifier
-                        .size(40.dp)
+                        .size(48.dp)
                         .scale(playScale)
                         .clip(CircleShape)
                         .background(colors.activePillBackground)
@@ -159,7 +154,7 @@ fun PixelMiniPlayer(
                         haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
                         onSkipNextClick()
                     },
-                    modifier = Modifier.size(36.dp)
+                    modifier = Modifier.size(48.dp)
                 ) {
                     Icon(
                         imageVector = Icons.Default.SkipNext,

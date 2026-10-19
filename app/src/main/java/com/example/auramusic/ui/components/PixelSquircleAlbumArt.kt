@@ -22,6 +22,10 @@ import androidx.compose.material3.Icon
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
+import com.example.auramusic.network.ArtworkResolver
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -41,28 +45,8 @@ import com.example.auramusic.theme.MonochromeBlack
 import com.example.auramusic.theme.MonochromeOutline
 import com.example.auramusic.theme.MonochromeSurface
 import com.example.auramusic.theme.MonochromeWhite
-import kotlin.math.absoluteValue
-
-// Vibrant, dynamic color palettes for colorful thumbnail generation & fallbacks
-private val colorfulGradientPalettes = listOf(
-    listOf(Color(0xFFFF416C), Color(0xFFFF4B2B)), // Fiery Sunset Orange-Red
-    listOf(Color(0xFF8A2387), Color(0xFFE94057), Color(0xFFF27121)), // Neon Magenta & Amber
-    listOf(Color(0xFF00C9FF), Color(0xFF92FE9D)), // Bright Cyan & Emerald
-    listOf(Color(0xFFFC466B), Color(0xFF3F5EFB)), // Cyberpunk Pink & Royal Blue
-    listOf(Color(0xFF11998E), Color(0xFF38EF7D)), // Vivid Mint & Teal
-    listOf(Color(0xFF654EA3), Color(0xFFEAAFC8)), // Velvet Violet & Rose
-    listOf(Color(0xFFF12711), Color(0xFFF5AF19)), // Golden Sunshine
-    listOf(Color(0xFF4776E6), Color(0xFF8E54E9)), // Deep Indigo Glow
-    listOf(Color(0xFF00B4DB), Color(0xFF0083B0)), // Electric Azure
-    listOf(Color(0xFFFA709A), Color(0xFFFEE140))  // Mango Peach Neon
-)
-
-@Composable
-fun rememberColorfulGradient(seed: String?): Brush {
-    val index = (seed?.hashCode() ?: 0).absoluteValue % colorfulGradientPalettes.size
-    val colors = colorfulGradientPalettes[index]
-    return remember(seed) { Brush.linearGradient(colors) }
-}
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 
 @Composable
 fun PixelSquircleAlbumArt(
@@ -71,37 +55,43 @@ fun PixelSquircleAlbumArt(
     modifier: Modifier = Modifier,
     cornerRadius: Dp = 32.dp,
     showVinylGrooves: Boolean = false,
-    titleFallback: String? = null
+    titleFallback: String? = null,
+    artist: String? = null,
+    audioUri: String? = null
 ) {
     val context = LocalContext.current
-    val fallbackGradient = rememberColorfulGradient(coverArtUrl ?: titleFallback)
+    val colors = com.example.auramusic.theme.PixelTheme.colors
+    var imageUrl by remember(coverArtUrl, titleFallback, artist, audioUri) { mutableStateOf(coverArtUrl) }
+    LaunchedEffect(coverArtUrl, titleFallback, artist, audioUri) {
+        if (!titleFallback.isNullOrBlank() && !artist.isNullOrBlank()) {
+            do {
+                imageUrl = ArtworkResolver.resolve(context, titleFallback, artist, coverArtUrl, audioUri)
+                if (imageUrl == null) delay(60_000)
+            } while (isActive && imageUrl == null)
+        }
+    }
 
     Box(
         contentAlignment = Alignment.Center,
         modifier = modifier
             .aspectRatio(1f)
-            .shadow(
-                elevation = 12.dp,
-                shape = RoundedCornerShape(cornerRadius),
-                ambientColor = Color.White.copy(alpha = 0.05f)
-            )
             .clip(RoundedCornerShape(cornerRadius))
-            .background(MonochromeSurface)
-            .border(1.dp, MonochromeOutline, RoundedCornerShape(cornerRadius))
+            .background(colors.surfaceContainer)
     ) {
-        if (!coverArtUrl.isNullOrBlank()) {
-            val imageRequest = remember(coverArtUrl) {
+        if (!imageUrl.isNullOrBlank()) {
+            val imageRequest = remember(imageUrl) {
                 ImageRequest.Builder(context)
-                    .data(coverArtUrl)
+                    .data(imageUrl)
                     .crossfade(150)
                     .allowHardware(true)
-                    .memoryCacheKey(coverArtUrl)
-                    .diskCacheKey(coverArtUrl)
+                    .memoryCacheKey(imageUrl)
+                    .diskCacheKey(imageUrl)
                     .build()
             }
             // Full color, high-definition thumbnail image without grayscale filters
             AsyncImage(
                 model = imageRequest,
+                onError = { imageUrl = null },
                 contentDescription = "Song Thumbnail Artwork",
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.fillMaxSize()
@@ -111,13 +101,13 @@ fun PixelSquircleAlbumArt(
             Box(
                 modifier = Modifier
                     .fillMaxSize()
-                    .background(fallbackGradient),
+                    .background(colors.surfaceHigh),
                 contentAlignment = Alignment.Center
             ) {
                 Icon(
                     imageVector = Icons.Default.MusicNote,
                     contentDescription = "Music Artwork",
-                    tint = Color.White.copy(alpha = 0.95f),
+                    tint = colors.textSecondary,
                     modifier = Modifier.size((cornerRadius.value * 1.3f).dp.coerceIn(20.dp, 56.dp))
                 )
             }

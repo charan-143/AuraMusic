@@ -113,7 +113,7 @@ fun PixelSleepTimerDialog(
                 Spacer(modifier = Modifier.height(6.dp))
 
                 Text(
-                    text = "Automatically pause lossless audio stream when timer ends.",
+                    text = "Automatically pause playback when the timer ends.",
                     fontSize = 12.sp,
                     color = MonochromeSilver
                 )

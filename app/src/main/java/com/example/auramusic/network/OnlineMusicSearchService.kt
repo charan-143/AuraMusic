@@ -132,7 +132,7 @@ class OnlineMusicSearchService {
         val onlineTracks = mutableListOf<Track>()
         val onlineAlbums = mutableListOf<Album>()
 
-        // 1. Fetch Full-Length Online Songs (320kbps Lossless CDN Streams)
+        // 1. Fetch Online songs
         try {
             val songUrl = "$SAAVN_BASE?__call=search.getResults&_format=json&_marker=0&api_version=4&ctx=web6dot0&q=$encodedQuery&p=1&n=30"
             val responseString = fetchUrl(songUrl)
@@ -158,10 +158,9 @@ class OnlineMusicSearchService {
                         val durationMs = if (durationSeconds > 0) durationSeconds * 1000L else 210000L
 
                         if (title.isNotBlank() && audioStreamUrl.isNotBlank()) {
-                            val isSpotify = (i % 2 == 0)
-                            val source = if (isSpotify) StreamingSource.SPOTIFY else StreamingSource.YOUTUBE_MUSIC
-                            val badge = if (isSpotify) "SPOTIFY 320K" else "YT LOSSLESS"
-                            val category = if (isSpotify) "Spotify" else "YouTube Music"
+                            val source = StreamingSource.JIOSAAVN
+                            val badge = "AAC"
+                            val category = "JioSaavn"
 
                             onlineTracks.add(
                                 Track(
@@ -174,7 +173,7 @@ class OnlineMusicSearchService {
                                     coverArtUrl = artwork,
                                     source = source,
                                     qualityBadge = badge,
-                                    isLossless = true,
+                                    isLossless = false,
                                     category = category
                                 )
                             )
@@ -206,15 +205,12 @@ class OnlineMusicSearchService {
                         val songCount = moreInfo?.optString("song_count", "10") ?: "10"
 
                         if (collectionName.isNotBlank()) {
-                            val isSpotify = (i % 2 == 0)
-                            val source = if (isSpotify) StreamingSource.SPOTIFY else StreamingSource.YOUTUBE_MUSIC
-                            val badge = if (isSpotify) "SPOTIFY LOSSLESS" else "YT LOSSLESS"
+                            val source = StreamingSource.JIOSAAVN
+                            val badge = "Audio"
 
                             // Find tracks matching this album from fetched songs, or take matching subset
                             val matchingTracks = onlineTracks.filter { it.album.equals(collectionName, ignoreCase = true) }
-                            val albumTracks = if (matchingTracks.isNotEmpty()) matchingTracks else {
-                                onlineTracks.take(4)
-                            }
+                            val albumTracks = matchingTracks
 
                             onlineAlbums.add(
                                 Album(
@@ -225,8 +221,8 @@ class OnlineMusicSearchService {
                                     year = releaseDate,
                                     source = source,
                                     qualityBadge = badge,
-                                    isLossless = true,
-                                    description = "$songCount tracks • Full studio album streaming in 320kbps lossless via ${source.displayName}.",
+                                    isLossless = false,
+                                    description = "$songCount tracks • Album available via ${source.displayName}.",
                                     tracks = albumTracks
                                 )
                             )
@@ -273,9 +269,8 @@ class OnlineMusicSearchService {
                         val durationMs = if (durationSeconds > 0) durationSeconds * 1000L else 210000L
 
                         if (title.isNotBlank() && audioStreamUrl.isNotBlank()) {
-                            val isSpotify = (i % 2 == 0)
-                            val source = if (isSpotify) StreamingSource.SPOTIFY else StreamingSource.YOUTUBE_MUSIC
-                            val badge = if (isSpotify) "SPOTIFY 320K" else "YT LOSSLESS"
+                            val source = StreamingSource.JIOSAAVN
+                            val badge = "AAC"
 
                             tracks.add(
                                 Track(
@@ -288,8 +283,8 @@ class OnlineMusicSearchService {
                                     coverArtUrl = artwork,
                                     source = source,
                                     qualityBadge = badge,
-                                    isLossless = true,
-                                    category = if (isSpotify) "Spotify" else "YouTube Music"
+                                    isLossless = false,
+                                    category = "JioSaavn"
                                 )
                             )
                         }
@@ -317,25 +312,6 @@ class OnlineMusicSearchService {
                         val artwork = item.optString("image", "").replace("150x150", "500x500")
                         val year = item.optString("year", "2024")
 
-                        val encryptedMediaUrl = moreInfo?.optString("encrypted_media_url", "") ?: ""
-                        val songUrl = decryptMediaUrl(encryptedMediaUrl)
-
-                        val albumSong = if (songUrl.isNotBlank()) {
-                            listOf(
-                                Track(
-                                    id = "album_track_${id}_1",
-                                    title = title,
-                                    artist = artist,
-                                    album = title,
-                                    durationMs = (moreInfo?.optLong("duration", 240L) ?: 240L) * 1000L,
-                                    audioUrl = songUrl,
-                                    coverArtUrl = artwork,
-                                    source = StreamingSource.SPOTIFY,
-                                    qualityBadge = "SPOTIFY 320K",
-                                    isLossless = true
-                                )
-                            )
-                        } else emptyList()
 
                         albums.add(
                             Album(
@@ -344,11 +320,11 @@ class OnlineMusicSearchService {
                                 artist = artist,
                                 coverArtUrl = artwork,
                                 year = year,
-                                source = if (i % 2 == 0) StreamingSource.SPOTIFY else StreamingSource.YOUTUBE_MUSIC,
-                                qualityBadge = "320K LOSSLESS",
-                                isLossless = true,
-                                description = "Trending new album released in studio 320kbps master quality.",
-                                tracks = albumSong
+                                source = StreamingSource.JIOSAAVN,
+                                qualityBadge = "AAC",
+                                isLossless = false,
+                                description = "Trending new album released in online audio.",
+                                tracks = emptyList()
                             )
                         )
                     }
@@ -396,9 +372,9 @@ class OnlineMusicSearchService {
                                     durationMs = duration,
                                     audioUrl = streamUrl,
                                     coverArtUrl = artwork,
-                                    source = StreamingSource.SPOTIFY,
-                                    qualityBadge = "320K LOSSLESS",
-                                    isLossless = true
+                                    source = StreamingSource.JIOSAAVN,
+                                    qualityBadge = "AAC",
+                                    isLossless = false
                                 )
                             )
                         }
@@ -409,6 +385,35 @@ class OnlineMusicSearchService {
             // Ignore
         }
         tracks
+    }
+
+    /** Only accept matching song/artist metadata; never substitute an unrelated cover. */
+    suspend fun findArtwork(title: String, artist: String): String? = withContext(Dispatchers.IO) {
+        fun normalized(value: String) = cleanText(value).lowercase(java.util.Locale.ROOT)
+            .replace(Regex("[^\\p{L}\\p{N}]+"), " ").trim()
+        val wantedTitle = normalized(title)
+        val wantedArtist = normalized(artist)
+        if (wantedTitle.isBlank() || wantedArtist.isBlank() || wantedArtist == "unknown artist" || artist == "<unknown>") {
+            return@withContext null
+        }
+        try {
+            val query = URLEncoder.encode("$title $artist", "UTF-8")
+            val response = fetchUrl("$SAAVN_BASE?__call=search.getResults&_format=json&_marker=0&api_version=4&ctx=web6dot0&q=$query&p=1&n=10")
+            val results = JSONObject(response).optJSONArray("results") ?: return@withContext null
+            for (i in 0 until results.length()) {
+                val item = results.getJSONObject(i)
+                val candidateArtist = normalized(parseArtistName(item, item.optJSONObject("more_info")))
+                if (normalized(item.optString("title")) == wantedTitle &&
+                    candidateArtist.isNotBlank() &&
+                    (candidateArtist == wantedArtist || candidateArtist.split(" ").containsAll(wantedArtist.split(" ")))) {
+                    val image = item.optString("image").replace("150x150", "500x500")
+                    if (image.startsWith("https://")) return@withContext image
+                }
+            }
+        } catch (_: Exception) {
+            // Leave artwork unresolved when offline or when no confident match exists.
+        }
+        null
     }
 
     private fun fetchUrl(urlString: String): String {
