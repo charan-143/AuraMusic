@@ -1,88 +1,34 @@
 package com.example.auramusic.ui.components
 
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.foundation.background
-import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
-import androidx.compose.foundation.gestures.detectVerticalDragGestures
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxHeight
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.offset
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
-import androidx.compose.foundation.layout.aspectRatio
-import androidx.compose.foundation.layout.defaultMinSize
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Download
-import androidx.compose.material.icons.filled.DownloadDone
-import androidx.compose.material.icons.filled.Favorite
-import androidx.compose.material.icons.filled.FavoriteBorder
-import androidx.compose.material.icons.filled.GraphicEq
-import androidx.compose.material.icons.filled.KeyboardArrowDown
-import androidx.compose.material.icons.filled.MoreVert
-import androidx.compose.material.icons.filled.Pause
-import androidx.compose.material.icons.filled.PlayArrow
-import androidx.compose.material.icons.filled.QueueMusic
-import androidx.compose.material.icons.filled.Repeat
-import androidx.compose.material.icons.filled.RepeatOne
-import androidx.compose.material.icons.filled.Shuffle
-import androidx.compose.material.icons.filled.SkipNext
-import androidx.compose.material.icons.filled.SkipPrevious
-import androidx.compose.material.icons.filled.Speed
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
+import androidx.compose.material.icons.filled.*
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
-import androidx.compose.ui.draw.scale
-import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.input.pointer.pointerInput
-import androidx.compose.ui.platform.LocalHapticFeedback
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.semantics.selected
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.animation.Crossfade
-import androidx.compose.animation.core.tween
-import androidx.compose.material.icons.filled.Mic
-import androidx.compose.runtime.collectAsState
 import com.example.auramusic.model.TrackLyrics
 import com.example.auramusic.player.PlaybackProgress
 import com.example.auramusic.player.PlayerState
-import com.example.auramusic.theme.MonochromeBlack
-import com.example.auramusic.theme.MonochromeLightGrey
-import com.example.auramusic.theme.MonochromeMuted
-import com.example.auramusic.theme.MonochromeOutline
-import com.example.auramusic.theme.MonochromeOutlineVariant
-import com.example.auramusic.theme.MonochromeSilver
-import com.example.auramusic.theme.MonochromeSurface
-import com.example.auramusic.theme.MonochromeSurfaceContainer
-import com.example.auramusic.theme.MonochromeSurfaceHighest
-import com.example.auramusic.theme.MonochromeWhite
-import com.example.auramusic.theme.PixelMotion
+import com.example.auramusic.theme.PixelTheme
 import kotlinx.coroutines.flow.StateFlow
-
 @Composable
 fun PixelExpandedPlayer(
     playerState: PlayerState,
@@ -106,588 +52,106 @@ fun PixelExpandedPlayer(
     onSeekToTimestamp: (Long) -> Unit = {},
     isDownloaded: Boolean = false,
     downloadProgress: Float? = null,
+    downloadError: String? = null,
     onDownloadClick: () -> Unit = {},
     onOpenSpeedSheet: () -> Unit = {},
+    onAudioOutputClick: () -> Unit = {},
     modifier: Modifier = Modifier
 ) {
-    val haptic = LocalHapticFeedback.current
+    val c = PixelTheme.colors
     val track = playerState.currentTrack ?: return
-
-    var dragOffsetY by remember { mutableStateOf(0f) }
-    val animatedOffsetY by animateFloatAsState(
-        targetValue = dragOffsetY,
-        animationSpec = PixelMotion.BouncySpring,
-        label = "expandedPlayerDragOffset"
-    )
-
-    val playInteractionSource = remember { MutableInteractionSource() }
-    val isPlayPressed by playInteractionSource.collectIsPressedAsState()
-    val playScale by animateFloatAsState(
-        targetValue = if (isPlayPressed) 0.88f else 1.0f,
-        animationSpec = PixelMotion.BouncySpring,
-        label = "heroPlayScale"
-    )
-
-    Column(
-        modifier = modifier
-            .fillMaxWidth()
-            .fillMaxHeight(0.93f)
-            .offset { IntOffset(0, animatedOffsetY.toInt()) }
-            .clip(RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp))
-            .background(MonochromeSurface)
-            .border(1.dp, MonochromeOutline, RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp))
-            .clickable(
-                interactionSource = remember { MutableInteractionSource() },
-                indication = null
-            ) {
-                // Intentionally consume all clicks inside the player sheet so they do not fall through to the background dismiss scrim
-            }
-            .navigationBarsPadding()
-            .padding(horizontal = 24.dp, vertical = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
-    ) {
-        // Drag Pill Handle with touch gesture support
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .padding(top = 4.dp, bottom = 8.dp)
-                .pointerInput(Unit) {
-                    detectVerticalDragGestures(
-                        onDragEnd = {
-                            if (dragOffsetY > 250f) {
-                                onCollapseClick()
-                            }
-                            dragOffsetY = 0f
-                        },
-                        onDragCancel = {
-                            dragOffsetY = 0f
-                        },
-                        onVerticalDrag = { change, dragAmount ->
-                            change.consume()
-                            dragOffsetY = (dragOffsetY + dragAmount).coerceAtLeast(0f)
-                        }
-                    )
-                },
-            contentAlignment = Alignment.Center
-        ) {
-            Box(
-                modifier = Modifier
-                    .width(42.dp)
-                    .height(4.dp)
-                    .clip(RoundedCornerShape(percent = 50))
-                    .background(MonochromeMuted)
-                    .clickable(
-                        interactionSource = remember { MutableInteractionSource() },
-                        indication = null
-                    ) {
-                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                        onCollapseClick()
+    var menu by remember { mutableStateOf(false) }
+    val fontScale = LocalDensity.current.fontScale
+    BoxWithConstraints(modifier.fillMaxWidth().fillMaxHeight(0.96f).clip(RoundedCornerShape(topStart = 32.dp, topEnd = 32.dp)).background(c.background).navigationBarsPadding()) {
+        val compact = maxHeight < 620.dp || fontScale > 1.3f
+        val artworkSize = minOf(maxWidth - 48.dp, 180.dp)
+        Column(Modifier.fillMaxSize().padding(horizontal = 24.dp)) {
+            Row(Modifier.fillMaxWidth().padding(vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                IconButton(onClick = onCollapseClick) { Icon(Icons.Default.KeyboardArrowDown, "Collapse player", tint = c.textPrimary) }
+                Text(if (isLyricsActive) "Lyrics" else "Now playing", modifier = Modifier.weight(1f), style = MaterialTheme.typography.titleSmall, color = c.textSecondary, textAlign = androidx.compose.ui.text.style.TextAlign.Center)
+                Box {
+                    IconButton(onClick = { menu = true }) { Icon(Icons.Default.MoreVert, "Song options", tint = c.textPrimary) }
+                    DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        DropdownMenuItem(text = { Text("Audio output") }, onClick = { menu = false; onAudioOutputClick() })
+                        DropdownMenuItem(text = { Text(if (isDownloaded) "Remove download" else "Download") }, onClick = { menu = false; onDownloadClick() })
+                        DropdownMenuItem(text = { Text("More song actions") }, onClick = { menu = false; onMoreOptionsClick() })
                     }
-            )
-        }
-
-        // 1. Top Bar: Collapse Icon, Mode Title & Album, Equalizer, Options
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(48.dp),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            IconButton(
-                onClick = onCollapseClick,
-                modifier = Modifier.size(40.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.KeyboardArrowDown,
-                    contentDescription = "Collapse",
-                    tint = MonochromeWhite,
-                    modifier = Modifier.size(28.dp)
-                )
-            }
-
-            Column(
-                horizontalAlignment = Alignment.CenterHorizontally,
-                modifier = Modifier
-                    .weight(1f)
-                    .padding(horizontal = 8.dp)
-            ) {
-                Text(
-                    text = "PLAYING FROM ALBUM",
-                    fontSize = 10.sp,
-                    fontWeight = FontWeight.Bold,
-                    letterSpacing = 1.2.sp,
-                    color = MonochromeSilver
-                )
-                Text(
-                    text = track.album,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                    color = MonochromeLightGrey,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-            }
-
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(
-                    onClick = {
-                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                        onToggleLyrics()
-                    },
-                    modifier = Modifier.size(40.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.Mic,
-                        contentDescription = "Synced Lyrics",
-                        tint = if (isLyricsActive) MonochromeWhite else MonochromeSilver,
-                        modifier = Modifier.size(22.dp)
-                    )
-                }
-
-                IconButton(
-                    onClick = {
-                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                        onEqualizerClick()
-                    },
-                    modifier = Modifier.size(40.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.GraphicEq,
-                        contentDescription = "Equalizer",
-                        tint = if (playerState.isEqualizerEnabled) MonochromeWhite else MonochromeSilver,
-                        modifier = Modifier.size(22.dp)
-                    )
-                }
-
-                IconButton(
-                    onClick = {
-                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                        onMoreOptionsClick()
-                    },
-                    modifier = Modifier.size(40.dp)
-                ) {
-                    Icon(
-                        imageVector = Icons.Default.MoreVert,
-                        contentDescription = "Options",
-                        tint = MonochromeWhite,
-                        modifier = Modifier.size(22.dp)
-                    )
                 }
             }
-        }
-
-        Spacer(modifier = Modifier.weight(0.25f).defaultMinSize(minHeight = 8.dp))
-
-        // 2. Hero Pixel Squircle Album Artwork OR Live Synced Lyrics View
-        Box(
-            modifier = Modifier
-                .weight(1.5f)
-                .fillMaxWidth(if (isLyricsActive) 1.0f else 0.88f),
-            contentAlignment = Alignment.Center
-        ) {
-            Crossfade(
-                targetState = isLyricsActive,
-                animationSpec = tween(280),
-                label = "lyricsViewCrossfade"
-            ) { active ->
-                if (active) {
-                    PixelExpandedLyricsSection(
-                        playbackProgressFlow = playbackProgressFlow,
-                        fallbackPositionMs = playerState.currentPositionMs,
-                        lyrics = lyrics,
-                        onSeekToTimestamp = onSeekToTimestamp,
-                        onSwitchToAlbumArt = onToggleLyrics,
-                        modifier = Modifier.fillMaxSize()
-                    )
-                } else {
-                    Box(
-                        modifier = Modifier
-                            .fillMaxSize()
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null
-                            ) {
-                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                                onToggleLyrics()
-                            },
+            if (isLyricsActive) {
+                Text(track.title, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.titleMedium, color = c.textPrimary)
+                Text(track.artist, maxLines = 1, overflow = TextOverflow.Ellipsis, style = MaterialTheme.typography.bodySmall, color = c.textSecondary)
+                PixelExpandedLyricsSection(playbackProgressFlow, playerState.currentPositionMs, lyrics, onSeekToTimestamp, onToggleLyrics, Modifier.weight(1f).padding(top = 12.dp))
+            }
+            Column(Modifier.fillMaxWidth().then(if (isLyricsActive) Modifier else Modifier.weight(1f)).then(if (compact || isLyricsActive) Modifier.verticalScroll(rememberScrollState()) else Modifier), horizontalAlignment = Alignment.CenterHorizontally) {
+                if (!isLyricsActive) {
+                    BoxWithConstraints(
+                        Modifier.fillMaxWidth().then(if (compact) Modifier.height(artworkSize + 32.dp) else Modifier.weight(1f)).padding(vertical = 16.dp),
                         contentAlignment = Alignment.Center
                     ) {
-                        PixelSquircleAlbumArt(
-                            coverArtUrl = track.coverArtUrl,
-                            isPlaying = playerState.isPlaying,
-                            cornerRadius = 28.dp,
-                            showVinylGrooves = false,
-                            titleFallback = track.title,
-                            modifier = Modifier.fillMaxSize()
-                        )
+                        val side = minOf(maxWidth, maxHeight)
+                        PixelSquircleAlbumArt(coverArtUrl = track.coverArtUrl, isPlaying = playerState.isPlaying,
+                            modifier = Modifier.size(side).testTag("player-artwork"), cornerRadius = 28.dp,
+                            titleFallback = track.title, artist = track.artist, audioUri = track.localFilePath ?: track.audioUrl)
                     }
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(track.title, fontSize = 22.sp, lineHeight = 27.sp, fontWeight = FontWeight.SemiBold, maxLines = 2, overflow = TextOverflow.Ellipsis, color = c.textPrimary)
+                            Spacer(Modifier.height(6.dp))
+                            Text(track.artist, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = c.textSecondary)
+                        }
+                        IconButton(onClick = onToggleFavorite) { Icon(if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder, if (isFavorite) "Remove from favorites" else "Add to favorites", tint = c.textPrimary) }
+                    }
+                    Spacer(Modifier.height(16.dp))
                 }
-            }
-        }
-
-        Spacer(modifier = Modifier.weight(0.35f).defaultMinSize(minHeight = 14.dp))
-
-        // 3. Track Details Row (Title, Artist, Badges, Heart Favorite)
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    text = track.title,
-                    fontSize = 21.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MonochromeWhite,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.height(3.dp))
-                Text(
-                    text = track.artist,
-                    fontSize = 14.sp,
-                    fontWeight = FontWeight.Normal,
-                    color = MonochromeSilver,
-                    maxLines = 1,
-                    overflow = TextOverflow.Ellipsis
-                )
-                Spacer(modifier = Modifier.height(6.dp))
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(MonochromeSurfaceHighest)
-                            .border(1.dp, MonochromeOutline, RoundedCornerShape(6.dp))
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            text = if (playerState.isAutoQualityEnabled) playerState.activeStreamingQualityBadge else track.qualityBadge,
-                            fontSize = 9.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MonochromeWhite,
-                            letterSpacing = 0.6.sp
-                        )
-                    }
-
-                    Spacer(modifier = Modifier.width(6.dp))
-
-                    Box(
-                        modifier = Modifier
-                            .clip(RoundedCornerShape(6.dp))
-                            .background(MonochromeSurfaceContainer)
-                            .border(1.dp, MonochromeOutlineVariant, RoundedCornerShape(6.dp))
-                            .clickable {
-                                haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                                onEqualizerClick()
-                            }
-                            .padding(horizontal = 6.dp, vertical = 2.dp)
-                    ) {
-                        Text(
-                            text = playerState.equalizerProfileBadge,
-                            fontSize = 8.sp,
-                            fontWeight = FontWeight.Bold,
-                            color = MonochromeWhite,
-                            letterSpacing = 0.5.sp
-                        )
-                    }
+                PixelExpandedSeekbarSection(playbackProgressFlow, playerState, playerState.isPlaying, onSeek)
+                Row(Modifier.fillMaxWidth().padding(vertical = 16.dp).testTag("player-transport"), horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = onToggleShuffle) { Icon(Icons.Default.Shuffle, if (playerState.isShuffle) "Shuffle on" else "Shuffle off", tint = if (playerState.isShuffle) c.textPrimary else c.textTertiary) }
+                    IconButton(onClick = onSkipPreviousClick) { Icon(Icons.Default.SkipPrevious, "Previous song", tint = c.textPrimary, modifier = Modifier.size(32.dp)) }
+                    FilledIconButton(onClick = onPlayPauseClick, modifier = Modifier.size(72.dp), shape = CircleShape) { Icon(if (playerState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow, if (playerState.isPlaying) "Pause" else "Play", modifier = Modifier.size(36.dp)) }
+                    IconButton(onClick = onSkipNextClick) { Icon(Icons.Default.SkipNext, "Next song", tint = c.textPrimary, modifier = Modifier.size(32.dp)) }
+                    IconButton(onClick = onToggleRepeat) { Icon(if (playerState.isRepeatOne) Icons.Default.RepeatOne else Icons.Default.Repeat, if (playerState.isRepeatOne) "Repeat one" else "Repeat off", tint = if (playerState.isRepeatOne) c.textPrimary else c.textTertiary) }
                 }
-            }
-
-            Spacer(modifier = Modifier.width(8.dp))
-
-            // Download Action Button
-            IconButton(
-                onClick = {
-                    haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                    onDownloadClick()
-                },
-                modifier = Modifier.size(42.dp)
-            ) {
-                if (downloadProgress != null) {
-                    androidx.compose.material3.CircularProgressIndicator(
-                        progress = { downloadProgress },
-                        strokeWidth = 2.dp,
-                        color = MonochromeWhite,
-                        modifier = Modifier.size(20.dp)
-                    )
-                } else {
-                    Icon(
-                        imageVector = if (isDownloaded) Icons.Default.DownloadDone else Icons.Default.Download,
-                        contentDescription = if (isDownloaded) "Downloaded" else "Download Track",
-                        tint = if (isDownloaded) MonochromeWhite else MonochromeSilver,
-                        modifier = Modifier.size(22.dp)
-                    )
+                Row(Modifier.fillMaxWidth().testTag("player-tools").clip(RoundedCornerShape(24.dp)).background(c.surfaceContainer).padding(vertical = 4.dp)) {
+                    PlayerTool(Icons.Default.QueueMusic, "Queue", false, onQueueClick, Modifier.weight(1f))
+                    PlayerTool(Icons.Default.Mic, "Lyrics", isLyricsActive, onToggleLyrics, Modifier.weight(1f))
+                    PlayerTool(Icons.Default.GraphicEq, "Sound", false, onEqualizerClick, Modifier.weight(1f))
+                    PlayerTool(Icons.Default.Speed, "Speed", playerState.playbackSpeed != 1f, onOpenSpeedSheet, Modifier.weight(1f))
                 }
+                downloadProgress?.let { LinearProgressIndicator(progress = { it }, modifier = Modifier.fillMaxWidth().padding(top = 8.dp)) }
+                downloadError?.let { Text(it, color = c.textSecondary, style = MaterialTheme.typography.bodySmall) }
+                Spacer(Modifier.height(16.dp))
             }
-
-            // Favorite Button
-            IconButton(
-                onClick = {
-                    haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                    onToggleFavorite()
-                },
-                modifier = Modifier.size(42.dp)
-            ) {
-                Icon(
-                    imageVector = if (isFavorite) Icons.Default.Favorite else Icons.Default.FavoriteBorder,
-                    contentDescription = "Favorite",
-                    tint = if (isFavorite) MonochromeWhite else MonochromeSilver,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        // 4. Pixel Dynamic Squiggly Wavy Seekbar with Travel Buffer
-        PixelExpandedSeekbarSection(
-            playbackProgressFlow = playbackProgressFlow,
-            fallbackPlayerState = playerState,
-            isPlaying = playerState.isPlaying,
-            onSeek = onSeek
-        )
-
-        Spacer(modifier = Modifier.height(14.dp))
-
-        // 5. Main Pixel Playback Controls
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Shuffle
-            IconButton(
-                onClick = {
-                    haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                    onToggleShuffle()
-                },
-                modifier = Modifier.size(40.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Shuffle,
-                    contentDescription = "Shuffle",
-                    tint = if (playerState.isShuffle) MonochromeWhite else MonochromeMuted,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-
-            // Skip Previous
-            IconButton(
-                onClick = {
-                    haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                    onSkipPreviousClick()
-                },
-                modifier = Modifier.size(48.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.SkipPrevious,
-                    contentDescription = "Previous Track",
-                    tint = MonochromeWhite,
-                    modifier = Modifier.size(34.dp)
-                )
-            }
-
-            // Hero Play/Pause Bouncy Squircle Button
-            Box(
-                contentAlignment = Alignment.Center,
-                modifier = Modifier
-                    .size(72.dp)
-                    .scale(playScale)
-                    .clip(RoundedCornerShape(24.dp))
-                    .background(MonochromeWhite)
-                    .clickable(
-                        interactionSource = playInteractionSource,
-                        indication = null
-                    ) {
-                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                        onPlayPauseClick()
-                    }
-            ) {
-                Icon(
-                    imageVector = if (playerState.isPlaying) Icons.Default.Pause else Icons.Default.PlayArrow,
-                    contentDescription = if (playerState.isPlaying) "Pause" else "Play",
-                    tint = MonochromeBlack,
-                    modifier = Modifier.size(36.dp)
-                )
-            }
-
-            // Skip Next
-            IconButton(
-                onClick = {
-                    haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                    onSkipNextClick()
-                },
-                modifier = Modifier.size(48.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.SkipNext,
-                    contentDescription = "Next Track",
-                    tint = MonochromeWhite,
-                    modifier = Modifier.size(34.dp)
-                )
-            }
-
-            // Repeat Mode
-            IconButton(
-                onClick = {
-                    haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                    onToggleRepeat()
-                },
-                modifier = Modifier.size(40.dp)
-            ) {
-                Icon(
-                    imageVector = if (playerState.isRepeatOne) Icons.Default.RepeatOne else Icons.Default.Repeat,
-                    contentDescription = "Repeat",
-                    tint = if (playerState.isRepeatOne) MonochromeWhite else MonochromeMuted,
-                    modifier = Modifier.size(24.dp)
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(18.dp))
-
-        // 6. Bottom Auxiliary Bar: Speed pill, Audio device pill, Queue
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            // Speed Chip
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(percent = 50))
-                    .background(MonochromeSurfaceContainer)
-                    .border(1.dp, MonochromeOutlineVariant, RoundedCornerShape(percent = 50))
-                    .clickable {
-                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                        onOpenSpeedSheet()
-                    }
-                    .padding(horizontal = 12.dp, vertical = 6.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Speed,
-                    contentDescription = "Playback Speed",
-                    tint = MonochromeSilver,
-                    modifier = Modifier.size(14.dp)
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = "${playerState.playbackSpeed}x",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = MonochromeWhite
-                )
-            }
-
-            // Synced Lyrics Pill Toggle
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier
-                    .clip(RoundedCornerShape(percent = 50))
-                    .background(if (isLyricsActive) MonochromeWhite else MonochromeSurfaceContainer)
-                    .border(1.dp, if (isLyricsActive) MonochromeWhite else MonochromeOutlineVariant, RoundedCornerShape(percent = 50))
-                    .clickable {
-                        haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.TextHandleMove)
-                        onToggleLyrics()
-                    }
-                    .padding(horizontal = 12.dp, vertical = 6.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.Mic,
-                    contentDescription = "Lyrics",
-                    tint = if (isLyricsActive) MonochromeBlack else MonochromeSilver,
-                    modifier = Modifier.size(13.dp)
-                )
-                Spacer(modifier = Modifier.width(4.dp))
-                Text(
-                    text = "Lyrics",
-                    fontSize = 11.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = if (isLyricsActive) MonochromeBlack else MonochromeWhite
-                )
-            }
-
-            // Queue List Button
-            IconButton(
-                onClick = onQueueClick,
-                modifier = Modifier.size(36.dp)
-            ) {
-                Icon(
-                    imageVector = Icons.Default.QueueMusic,
-                    contentDescription = "Queue",
-                    tint = MonochromeWhite,
-                    modifier = Modifier.size(22.dp)
-                )
-            }
-        }
-
-        Spacer(modifier = Modifier.height(4.dp))
-    }
-}
-
-@Composable
-private fun PixelExpandedSeekbarSection(
-    playbackProgressFlow: StateFlow<PlaybackProgress>?,
-    fallbackPlayerState: PlayerState,
-    isPlaying: Boolean,
-    onSeek: (Float) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val progressState = playbackProgressFlow?.collectAsState()?.value
-    val progress = progressState?.progress ?: fallbackPlayerState.progress
-    val buffered = progressState?.bufferedProgress ?: fallbackPlayerState.bufferedProgress
-    val currentFormatted = progressState?.formattedCurrentPosition ?: fallbackPlayerState.formattedCurrentPosition
-    val durationFormatted = progressState?.formattedDuration ?: fallbackPlayerState.formattedDuration
-
-    Column(modifier = modifier.fillMaxWidth()) {
-        PixelSquigglySeekbar(
-            progress = progress,
-            bufferedProgress = buffered,
-            isPlaying = isPlaying,
-            onSeek = onSeek,
-            activeColor = MonochromeWhite,
-            inactiveColor = MonochromeOutline
-        )
-
-        Spacer(modifier = Modifier.height(4.dp))
-
-        Row(
-            modifier = Modifier.fillMaxWidth(),
-            horizontalArrangement = Arrangement.SpaceBetween
-        ) {
-            Text(
-                text = currentFormatted,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
-                color = MonochromeSilver
-            )
-            Text(
-                text = durationFormatted,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.Medium,
-                color = MonochromeSilver
-            )
         }
     }
 }
 
 @Composable
-private fun PixelExpandedLyricsSection(
-    playbackProgressFlow: StateFlow<PlaybackProgress>?,
-    fallbackPositionMs: Long,
-    lyrics: TrackLyrics?,
-    onSeekToTimestamp: (Long) -> Unit,
-    onSwitchToAlbumArt: () -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val currentPos = playbackProgressFlow?.collectAsState()?.value?.currentPositionMs ?: fallbackPositionMs
-    PixelSyncedLyricsView(
-        lyrics = lyrics,
-        currentPositionMs = currentPos,
-        onSeekToTimestamp = onSeekToTimestamp,
-        onSwitchToAlbumArt = onSwitchToAlbumArt,
-        modifier = modifier
-    )
+private fun PlayerTool(icon: ImageVector, label: String, selected: Boolean, onClick: () -> Unit, modifier: Modifier) {
+    val c = PixelTheme.colors
+    Column(modifier.semantics { this.selected = selected }.clip(RoundedCornerShape(20.dp)).clickable(role = Role.Button, onClick = onClick).padding(vertical = 12.dp), horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(4.dp)) {
+        Icon(icon, contentDescription = null, tint = if (selected) c.textPrimary else c.textSecondary, modifier = Modifier.size(22.dp))
+        Text(label, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 12.sp, fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium, color = c.textPrimary)
+    }
+}
+
+
+
+@Composable
+private fun PixelExpandedSeekbarSection(playbackProgressFlow: StateFlow<PlaybackProgress>?, fallbackPlayerState: PlayerState, isPlaying: Boolean, onSeek: (Float) -> Unit) {
+    val progress = playbackProgressFlow?.collectAsState()?.value
+    val c = PixelTheme.colors
+    Column(Modifier.fillMaxWidth()) {
+        PixelSquigglySeekbar(progress = progress?.progress ?: fallbackPlayerState.progress, bufferedProgress = progress?.bufferedProgress ?: fallbackPlayerState.bufferedProgress, isPlaying = isPlaying, onSeek = onSeek, activeColor = c.textPrimary, inactiveColor = c.outline)
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            Text(progress?.formattedCurrentPosition ?: fallbackPlayerState.formattedCurrentPosition, fontSize = 12.sp, color = c.textSecondary)
+            Text(progress?.formattedDuration ?: fallbackPlayerState.formattedDuration, fontSize = 12.sp, color = c.textSecondary)
+        }
+    }
+}
+
+@Composable
+private fun PixelExpandedLyricsSection(playbackProgressFlow: StateFlow<PlaybackProgress>?, fallbackPositionMs: Long, lyrics: TrackLyrics?, onSeekToTimestamp: (Long) -> Unit, onSwitchToAlbumArt: () -> Unit, modifier: Modifier) {
+    val position = playbackProgressFlow?.collectAsState()?.value?.currentPositionMs ?: fallbackPositionMs
+    PixelSyncedLyricsView(lyrics, position, onSeekToTimestamp, onSwitchToAlbumArt, modifier)
 }

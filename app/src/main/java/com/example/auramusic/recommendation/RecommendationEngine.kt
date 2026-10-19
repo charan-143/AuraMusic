@@ -7,7 +7,6 @@ import com.example.auramusic.model.Album
 import com.example.auramusic.model.RecommendationSection
 import com.example.auramusic.model.StreamingSource
 import com.example.auramusic.model.Track
-import com.example.auramusic.network.OnlineMusicSearchService
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Calendar
@@ -226,28 +225,28 @@ class RecommendationEngine(
                 title = "Morning Flow & Awakening",
                 subtitle = "Energizing acoustic melodies, uplifting vocals & morning clarity",
                 preferredVibes = listOf(MusicVibe.DEVOTIONAL, MusicVibe.LOFI_ACOUSTIC_INDIE, MusicVibe.ROMANTIC_SOULFUL, MusicVibe.CHART_TOPPING_POP),
-                source = StreamingSource.SPOTIFY
+                source = StreamingSource.JIOSAAVN
             )
             in 12..16 -> TimeContext(
                 id = "rec_deep_focus",
                 title = "Deep Focus & Afternoon Calm",
                 subtitle = "Concentration soundscapes, acoustic resonance & calming rhythms",
                 preferredVibes = listOf(MusicVibe.DEEP_FOCUS, MusicVibe.CINEMATIC_AMBIENT, MusicVibe.LOFI_ACOUSTIC_INDIE),
-                source = StreamingSource.YOUTUBE_MUSIC
+                source = StreamingSource.JIOSAAVN
             )
             in 17..21 -> TimeContext(
                 id = "rec_golden_hour",
                 title = "Golden Hour Vibes & Anthems",
                 subtitle = "Chart-topping party hits, dynamic bass & high-energy anthems",
                 preferredVibes = listOf(MusicVibe.HIGH_ENERGY_DANCE, MusicVibe.ROCK_ALTERNATIVE, MusicVibe.CHART_TOPPING_POP),
-                source = StreamingSource.SPOTIFY
+                source = StreamingSource.JIOSAAVN
             )
             else -> TimeContext(
                 id = "rec_midnight_chill",
                 title = "Midnight Melancholy & Chill",
                 subtitle = "Soothing late-night acoustics, mellow soul & midnight tranquility",
                 preferredVibes = listOf(MusicVibe.ROMANTIC_SOULFUL, MusicVibe.CINEMATIC_AMBIENT, MusicVibe.LOFI_ACOUSTIC_INDIE),
-                source = StreamingSource.LOSSLESS_FLAC
+                source = StreamingSource.JIOSAAVN
             )
         }
     }
@@ -262,8 +261,8 @@ class RecommendationEngine(
      * - "Made For You • Daily Mix"
      * - Time-of-Day Adaptive Curation (Morning/Afternoon/Golden Hour/Midnight)
      * - "Sonic Neighbors" (More Like Current Track)
-     * - "Trending on Spotify"
-     * - "Hot on YouTube Music"
+     * - "Trending on JioSaavn"
+     * - "More to Explore"
      * - "Lossless Masterworks"
      * - "Deep Cuts & Hidden Gems"
      */
@@ -301,7 +300,7 @@ class RecommendationEngine(
         } else if (activeTrack != null) {
             "Sonic blend inspired by ${activeTrack.title}"
         } else {
-            "Personalized lossless mix tuned to your tastes"
+            "A personalized mix tuned to your tastes"
         }
 
         sections.add(
@@ -309,7 +308,7 @@ class RecommendationEngine(
                 id = "rec_daily_mix",
                 title = "Made For You • Daily Mix",
                 subtitle = dailyMixSubtitle,
-                source = activeTrack?.source ?: StreamingSource.SPOTIFY,
+                source = activeTrack?.source ?: StreamingSource.JIOSAAVN,
                 albums = dailyMixAlbums,
                 tracks = dailyMixTracks
             )
@@ -370,14 +369,14 @@ class RecommendationEngine(
         // -----------------------------------------------------------------
         // SECTION 4: Trending on Spotify (Chart-toppers in 320kbps)
         // -----------------------------------------------------------------
-        val spotifyAlbums = allAlbums.filter { it.source == StreamingSource.SPOTIFY }.ifEmpty { allAlbums.take(4) }
-        val spotifyTracks = allTracks.filter { it.source == StreamingSource.SPOTIFY }.deduplicated().ifEmpty { allTracks.deduplicated().take(6) }
+        val spotifyAlbums = allAlbums.filter { it.source == StreamingSource.JIOSAAVN }.ifEmpty { allAlbums.take(4) }
+        val spotifyTracks = allTracks.filter { it.source == StreamingSource.JIOSAAVN }.deduplicated().ifEmpty { allTracks.deduplicated().take(6) }
         sections.add(
             RecommendationSection(
                 id = "rec_spotify_trending",
-                title = "Trending on Spotify",
-                subtitle = "Popular 320kbps full-length studio streams",
-                source = StreamingSource.SPOTIFY,
+                title = "Trending on JioSaavn",
+                subtitle = "Popular songs from the online catalog",
+                source = StreamingSource.JIOSAAVN,
                 albums = spotifyAlbums,
                 tracks = spotifyTracks.take(6)
             )
@@ -386,14 +385,14 @@ class RecommendationEngine(
         // -----------------------------------------------------------------
         // SECTION 5: Hot on YouTube Music (Lossless & Live Master Releases)
         // -----------------------------------------------------------------
-        val ytmAlbums = allAlbums.filter { it.source == StreamingSource.YOUTUBE_MUSIC }.ifEmpty { allAlbums.drop(1).take(4) }
-        val ytmTracks = allTracks.filter { it.source == StreamingSource.YOUTUBE_MUSIC }.deduplicated().ifEmpty { allTracks.deduplicated().drop(2).take(6) }
+        val ytmAlbums = allAlbums.filter { it.source == StreamingSource.JIOSAAVN }.ifEmpty { allAlbums.drop(1).take(4) }
+        val ytmTracks = allTracks.filter { it.source == StreamingSource.JIOSAAVN }.deduplicated().ifEmpty { allTracks.deduplicated().drop(2).take(6) }
         sections.add(
             RecommendationSection(
                 id = "rec_ytm_hot",
-                title = "Hot on YouTube Music",
-                subtitle = "High-definition Opus master soundscapes & viral hits",
-                source = StreamingSource.YOUTUBE_MUSIC,
+                title = "More to Explore",
+                subtitle = "More songs from the online catalog",
+                source = StreamingSource.JIOSAAVN,
                 albums = ytmAlbums,
                 tracks = ytmTracks.take(6)
             )
@@ -402,18 +401,20 @@ class RecommendationEngine(
         // -----------------------------------------------------------------
         // SECTION 6: Audiophile Lossless Masterworks
         // -----------------------------------------------------------------
-        val losslessAlbums = allAlbums.filter { it.isLossless }.ifEmpty { allAlbums.take(3) }
-        val losslessTracks = allTracks.filter { it.isLossless }.deduplicated().ifEmpty { allTracks.deduplicated().take(6) }
+        val losslessAlbums = allAlbums.filter { it.isLossless }
+        val losslessTracks = allTracks.filter { it.isLossless }.deduplicated()
+        if (losslessAlbums.isNotEmpty() || losslessTracks.isNotEmpty()) {
         sections.add(
             RecommendationSection(
                 id = "rec_lossless_masters",
                 title = "Lossless Masterworks",
-                subtitle = "Studio master quality recordings in pure acoustic fidelity",
+                subtitle = "Lossless audio from your library",
                 source = StreamingSource.LOSSLESS_FLAC,
                 albums = losslessAlbums,
                 tracks = losslessTracks.take(6)
             )
         )
+        }
 
         // -----------------------------------------------------------------
         // SECTION 7: Deep Cuts & Undiscovered Gems (Zero/Low Play Count)
@@ -429,7 +430,7 @@ class RecommendationEngine(
                     id = "rec_deep_cuts",
                     title = "Deep Cuts & Undiscovered Gems",
                     subtitle = "Explore hidden acoustic treasures from the global catalog",
-                    source = StreamingSource.LOSSLESS_FLAC,
+                    source = StreamingSource.JIOSAAVN,
                     albums = emptyList(),
                     tracks = deepCuts
                 )
@@ -753,233 +754,7 @@ class RecommendationEngine(
         }
     }
 
-    // ==========================================
-    // 7. COMPREHENSIVE CURATED FALLBACK BANK
-    // ==========================================
-
-    private val curatedFallbackTracks by lazy {
-        listOf(
-            Track(
-                id = "curated_tum_ho_wahi",
-                title = "Tum Ho Wahi",
-                artist = "Armaan Malik, Shreya Karmakar, Ram Sampath",
-                album = "Don't Be Shy",
-                durationMs = 214000L,
-                audioUrl = OnlineMusicSearchService.decryptMediaUrl("ID2ieOjCrwfgWvL5sXl4B1ImC5QfbsDy3oAkJDMbq8VkXOZU65DcFdrDhsTWIRT7u/8vMld9DHecVMFCBmD5/Rw7tS9a8Gtq"),
-                coverArtUrl = "https://c.saavncdn.com/974/Don-t-Be-Shy-Hindi-2026-20260912180512-500x500.jpg",
-                source = StreamingSource.SPOTIFY,
-                qualityBadge = "SPOTIFY 320K",
-                isLossless = true,
-                category = "Spotify"
-            ),
-            Track(
-                id = "curated_dil_ibaadat",
-                title = "Dil Ibaadat",
-                artist = "KK, Pritam",
-                album = "Tum Mile",
-                durationMs = 329000L,
-                audioUrl = OnlineMusicSearchService.decryptMediaUrl("ID2ieOjCrwfgWvL5sXl4B1ImC5QfbsDyoW+9vqQ1AvpNtBuxtRV/trXO0wRsM9SJAudwVBa8NXR0K5rNf9PdHhw7tS9a8Gtq"),
-                coverArtUrl = "https://c.saavncdn.com/184/Tum-Mile-Hindi-2009-20190629162908-500x500.jpg",
-                source = StreamingSource.LOSSLESS_FLAC,
-                qualityBadge = "24-BIT FLAC",
-                isLossless = true,
-                category = "Lossless"
-            ),
-            Track(
-                id = "curated_barbaad",
-                title = "Barbaad",
-                artist = "Jubin Nautiyal, The Rish",
-                album = "Saiyaara",
-                durationMs = 213000L,
-                audioUrl = OnlineMusicSearchService.decryptMediaUrl("ID2ieOjCrwfgWvL5sXl4B1ImC5QfbsDynTibb8fRyG1tbcCQQQR3MOwq4OxvkVNxRxh5wdnqMsXr4IMM0hwwihw7tS9a8Gtq"),
-                coverArtUrl = "https://c.saavncdn.com/582/Saiyaara-Hindi-2025-20250711153018-500x500.jpg",
-                source = StreamingSource.SPOTIFY,
-                qualityBadge = "320K LOSSLESS",
-                isLossless = true,
-                category = "Spotify"
-            ),
-            Track(
-                id = "curated_arz_kiya_hai",
-                title = "Arz Kiya Hai",
-                artist = "Anuv Jain, Lost Stories",
-                album = "Coke Studio Bharat",
-                durationMs = 289000L,
-                audioUrl = OnlineMusicSearchService.decryptMediaUrl("ID2ieOjCrwfgWvL5sXl4B1ImC5QfbsDy0sB13nYLqBDMTtFUYrKmMui3nVSjruDwLS/IRFPQXAJAhv8jbZTiwRw7tS9a8Gtq"),
-                coverArtUrl = "https://c.saavncdn.com/839/Arz-Kiya-Hai-Coke-Studio-Bharat-Hindi-2025-20250808124500-500x500.jpg",
-                source = StreamingSource.YOUTUBE_MUSIC,
-                qualityBadge = "YT LOSSLESS",
-                isLossless = true,
-                category = "YouTube Music"
-            ),
-            Track(
-                id = "curated_gehra_hua",
-                title = "Gehra Hua",
-                artist = "Arijit Singh, Shashwat Sachdev",
-                album = "Dhurandhar",
-                durationMs = 245000L,
-                audioUrl = OnlineMusicSearchService.decryptMediaUrl("ID2ieOjCrwfgWvL5sXl4B1ImC5QfbsDy3oAkJDMbq8VkXOZU65DcFdrDhsTWIRT7u/8vMld9DHecVMFCBmD5/Rw7tS9a8Gtq"),
-                coverArtUrl = "https://c.saavncdn.com/391/Dhurandhar-Hindi-2026-20260905141012-500x500.jpg",
-                source = StreamingSource.SPOTIFY,
-                qualityBadge = "SPOTIFY 320K",
-                isLossless = true,
-                category = "Spotify"
-            ),
-            Track(
-                id = "curated_yeshanagula",
-                title = "Yeshanagula",
-                artist = "Anirudh Ravichander, Singer Prabha, Jangi Reddy",
-                album = "The Paradise",
-                durationMs = 236000L,
-                audioUrl = OnlineMusicSearchService.decryptMediaUrl("ID2ieOjCrwfgWvL5sXl4B1ImC5QfbsDy0sB13nYLqBDMTtFUYrKmMui3nVSjruDwLS/IRFPQXAJAhv8jbZTiwRw7tS9a8Gtq"),
-                coverArtUrl = "https://c.saavncdn.com/712/The-Paradise-Telugu-2026-20260901112015-500x500.jpg",
-                source = StreamingSource.YOUTUBE_MUSIC,
-                qualityBadge = "YT LOSSLESS",
-                isLossless = true,
-                category = "YouTube Music"
-            ),
-            Track(
-                id = "curated_basinga_balaalu",
-                title = "Basinga Balaalu",
-                artist = "Kalyan Keys, Swamy Naresh, Srinidhi Nerella",
-                album = "Basinga Balaalu",
-                durationMs = 256000L,
-                audioUrl = OnlineMusicSearchService.decryptMediaUrl("ID2ieOjCrwfgWvL5sXl4B1ImC5QfbsDynTibb8fRyG1tbcCQQQR3MOwq4OxvkVNxRxh5wdnqMsXr4IMM0hwwihw7tS9a8Gtq"),
-                coverArtUrl = "https://c.saavncdn.com/643/Basinga-Balaalu-Telugu-2026-20260828091522-500x500.jpg",
-                source = StreamingSource.SPOTIFY,
-                qualityBadge = "320K LOSSLESS",
-                isLossless = true,
-                category = "Spotify"
-            ),
-            Track(
-                id = "curated_hanuman_chalisa",
-                title = "Shree Hanuman Chalisa",
-                artist = "Hariharan, Lalit Sen",
-                album = "Shree Hanuman Chalisa",
-                durationMs = 582000L,
-                audioUrl = OnlineMusicSearchService.decryptMediaUrl("ID2ieOjCrwfgWvL5sXl4B1ImC5QfbsDyoW+9vqQ1AvpNtBuxtRV/trXO0wRsM9SJAudwVBa8NXR0K5rNf9PdHhw7tS9a8Gtq"),
-                coverArtUrl = "https://c.saavncdn.com/023/Shree-Hanuman-Chalisa-Hindi-1992-20200810142010-500x500.jpg",
-                source = StreamingSource.LOSSLESS_FLAC,
-                qualityBadge = "24-BIT FLAC",
-                isLossless = true,
-                category = "Lossless"
-            ),
-            Track(
-                id = "curated_casa_tupka",
-                title = "Casa Tupka Anthemo",
-                artist = "Yo Yo Honey Singh, Priyanshi Srivastava",
-                album = "Casa Tupka Anthemo",
-                durationMs = 184000L,
-                audioUrl = OnlineMusicSearchService.decryptMediaUrl("ID2ieOjCrwfgWvL5sXl4B1ImC5QfbsDy3oAkJDMbq8VkXOZU65DcFdrDhsTWIRT7u/8vMld9DHecVMFCBmD5/Rw7tS9a8Gtq"),
-                coverArtUrl = "https://c.saavncdn.com/481/Casa-Tupka-Anthemo-Hindi-2026-20260919103011-500x500.jpg",
-                source = StreamingSource.SPOTIFY,
-                qualityBadge = "SPOTIFY 320K",
-                isLossless = true,
-                category = "Spotify"
-            ),
-            Track(
-                id = "curated_starboy",
-                title = "Starboy",
-                artist = "The Weeknd, Daft Punk",
-                album = "Starboy",
-                durationMs = 230000L,
-                audioUrl = OnlineMusicSearchService.decryptMediaUrl("ID2ieOjCrwfgWvL5sXl4B1ImC5QfbsDynTibb8fRyG1tbcCQQQR3MOwq4OxvkVNxRxh5wdnqMsXr4IMM0hwwihw7tS9a8Gtq"),
-                coverArtUrl = "https://c.saavncdn.com/410/Starboy-English-2016-500x500.jpg",
-                source = StreamingSource.SPOTIFY,
-                qualityBadge = "320K LOSSLESS",
-                isLossless = true,
-                category = "Spotify"
-            ),
-            Track(
-                id = "curated_believer",
-                title = "Believer",
-                artist = "Imagine Dragons",
-                album = "Evolve",
-                durationMs = 204000L,
-                audioUrl = OnlineMusicSearchService.decryptMediaUrl("ID2ieOjCrwfgWvL5sXl4B1ImC5QfbsDy3oAkJDMbq8VkXOZU65DcFdrDhsTWIRT7u/8vMld9DHecVMFCBmD5/Rw7tS9a8Gtq"),
-                coverArtUrl = "https://c.saavncdn.com/248/Evolve-English-2018-20260605220036-500x500.jpg",
-                source = StreamingSource.SPOTIFY,
-                qualityBadge = "SPOTIFY 320K",
-                isLossless = true,
-                category = "Spotify"
-            ),
-            Track(
-                id = "curated_time",
-                title = "Time",
-                artist = "Hans Zimmer",
-                album = "Inception (OST)",
-                durationMs = 275000L,
-                audioUrl = OnlineMusicSearchService.decryptMediaUrl("ID2ieOjCrwfgWvL5sXl4B1ImC5QfbsDy0sB13nYLqBDMTtFUYrKmMui3nVSjruDwLS/IRFPQXAJAhv8jbZTiwRw7tS9a8Gtq"),
-                coverArtUrl = "https://c.saavncdn.com/139/Inception-English-2010-500x500.jpg",
-                source = StreamingSource.YOUTUBE_MUSIC,
-                qualityBadge = "YT LOSSLESS",
-                isLossless = true,
-                category = "YouTube Music"
-            )
-        )
-    }
-
-    private val curatedFallbackAlbums by lazy {
-        listOf(
-            Album(
-                id = "curated_album_dont_be_shy",
-                title = "Don't Be Shy",
-                artist = "Ram Sampath, Armaan Malik",
-                coverArtUrl = "https://c.saavncdn.com/974/Don-t-Be-Shy-Hindi-2026-20260912180512-500x500.jpg",
-                year = "2026",
-                source = StreamingSource.SPOTIFY,
-                qualityBadge = "SPOTIFY 320K",
-                isLossless = true,
-                description = "Romantic studio soundtrack featuring Tum Ho Wahi and Dil Ke Mehmaan.",
-                tracks = curatedFallbackTracks.take(1)
-            ),
-            Album(
-                id = "curated_album_tum_mile",
-                title = "Tum Mile (Original Motion Picture Soundtrack)",
-                artist = "Pritam, KK",
-                coverArtUrl = "https://c.saavncdn.com/184/Tum-Mile-Hindi-2009-20190629162908-500x500.jpg",
-                year = "2009",
-                source = StreamingSource.LOSSLESS_FLAC,
-                qualityBadge = "24-BIT FLAC",
-                isLossless = true,
-                description = "Audiophile cult classic featuring Dil Ibaadat, Tu Hi Haqeeqat and Tum Mile.",
-                tracks = curatedFallbackTracks.drop(1).take(1)
-            ),
-            Album(
-                id = "curated_album_the_paradise",
-                title = "The Paradise",
-                artist = "Anirudh Ravichander",
-                coverArtUrl = "https://c.saavncdn.com/712/The-Paradise-Telugu-2026-20260901112015-500x500.jpg",
-                year = "2026",
-                source = StreamingSource.YOUTUBE_MUSIC,
-                qualityBadge = "YT LOSSLESS",
-                isLossless = true,
-                description = "Chart-shattering Telugu soundscapes featuring Yeshanagula and Aaya Sher.",
-                tracks = curatedFallbackTracks.filter { it.title == "Yeshanagula" }
-            ),
-            Album(
-                id = "curated_album_evolve",
-                title = "Evolve",
-                artist = "Imagine Dragons",
-                coverArtUrl = "https://c.saavncdn.com/248/Evolve-English-2018-20260605220036-500x500.jpg",
-                year = "2018",
-                source = StreamingSource.SPOTIFY,
-                qualityBadge = "320K LOSSLESS",
-                isLossless = true,
-                description = "Multi-platinum studio album featuring Believer and Whatever It Takes.",
-                tracks = curatedFallbackTracks.filter { it.title == "Believer" }
-            ),
-            Album(
-                id = "curated_album_inception",
-                title = "Inception (Original Soundtrack)",
-                artist = "Hans Zimmer",
-                coverArtUrl = "https://c.saavncdn.com/139/Inception-English-2010-500x500.jpg",
-                year = "2010",
-                source = StreamingSource.YOUTUBE_MUSIC,
-                qualityBadge = "HD OPUS 256K",
-                isLossless = true,
-                description = "Iconic cinematic masterpiece featuring Time and Dream Is Collapsing.",
-                tracks = curatedFallbackTracks.filter { it.title == "Time" }
-            )
-        )
-    }
+    // Discovery must use provider-backed records; never invent playable title/URL pairs.
+    private val curatedFallbackTracks: List<Track> = emptyList()
+    private val curatedFallbackAlbums: List<Album> = emptyList()
 }

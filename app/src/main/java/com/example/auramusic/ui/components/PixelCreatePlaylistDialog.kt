@@ -75,7 +75,7 @@ fun PixelCreatePlaylistDialog(
                 Spacer(modifier = Modifier.height(6.dp))
 
                 Text(
-                    text = "Organize Spotify, YouTube Music, and Lossless FLAC streams into custom collections.",
+                    text = "Organize your local and online songs into custom collections.",
                     fontSize = 12.sp,
                     color = MonochromeSilver
                 )

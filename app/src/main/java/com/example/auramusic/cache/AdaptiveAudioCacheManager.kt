@@ -48,31 +48,9 @@ class AdaptiveAudioCacheManager(private val context: Context) {
             .setAllowCrossProtocolRedirects(true)
             .setConnectTimeoutMs(8000)
             .setReadTimeoutMs(15000)
-            .setUserAgent("AuraMusic-LosslessStreamer/2.0")
-            .setDefaultRequestProperties(
-                mapOf(
-                    "Accept" to "audio/flac, audio/x-flac, audio/*; q=1.0",
-                    "X-Audio-Bitrate" to "lossless-24bit",
-                    "X-Lossless-Stream" to "true"
-                )
-            )
+            .setUserAgent("AuraMusic/1.0")
+            .setDefaultRequestProperties(mapOf("Accept" to "audio/*"))
 
-    fun updateStreamingQualityHeaders(targetBitrateKbps: Int) {
-        val (bitrateHeader, acceptHeader) = when {
-            targetBitrateKbps >= 1000 -> "lossless-24bit" to "audio/flac, audio/x-flac, audio/*; q=1.0"
-            targetBitrateKbps >= 320 -> "320kbps-high" to "audio/mpeg, audio/mp4, audio/*; q=0.9"
-            targetBitrateKbps >= 256 -> "256kbps-opus" to "audio/opus, audio/ogg, audio/*; q=0.9"
-            else -> "128kbps-saver" to "audio/opus, audio/aac, audio/*; q=0.8"
-        }
-        httpDataSourceFactory.setDefaultRequestProperties(
-            mapOf(
-                "Accept" to acceptHeader,
-                "X-Audio-Bitrate" to bitrateHeader,
-                "X-Lossless-Stream" to (targetBitrateKbps >= 1000).toString(),
-                "X-Auto-Adaptive-Quality" to "true"
-            )
-        )
-    }
 
     val defaultDataSourceFactory: DataSource.Factory by lazy {
         androidx.media3.datasource.DefaultDataSource.Factory(context.applicationContext, httpDataSourceFactory)

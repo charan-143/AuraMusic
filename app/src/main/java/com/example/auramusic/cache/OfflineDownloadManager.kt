@@ -1,334 +1,356 @@
 package com.example.auramusic.cache
 
 import android.content.Context
+import android.net.Uri
 import android.os.Environment
+import android.util.AtomicFile
 import android.util.Log
-import com.example.auramusic.model.StreamingSource
+import com.example.auramusic.data.TrackJson
 import com.example.auramusic.model.Track
-import kotlinx.coroutines.CoroutineScope
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
+import kotlinx.coroutines.*
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
-import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
+import android.net.ConnectivityManager
+import android.net.NetworkCapabilities
+import android.net.Network
 import java.io.File
+import java.io.FileInputStream
 import java.io.FileOutputStream
-import java.io.InputStream
 import java.net.HttpURLConnection
 import java.net.URL
-import java.util.concurrent.ConcurrentHashMap
+import java.security.MessageDigest
 
 sealed class DownloadState {
     object NotDownloaded : DownloadState()
     data class Downloading(val progress: Float) : DownloadState()
     data class Downloaded(val localPath: String) : DownloadState()
     data class Failed(val error: String) : DownloadState()
+    data class Paused(val waitingForWifi: Boolean = false) : DownloadState()
 }
 
-class OfflineDownloadManager private constructor(private val context: Context) {
-
+class OfflineDownloadManager internal constructor(
+    private val context: Context,
+    private val catalogResolver: com.example.auramusic.network.CatalogTrackResolver = com.example.auramusic.network.CatalogTrackResolver(),
+    private val wifiAvailable: (() -> Boolean)? = null
+) {
     companion object {
-        private const val TAG = "OfflineDownloadManager"
-        private const val INDEX_FILE_NAME = "downloaded_tracks_index.json"
-
-        @Volatile
-        private var instance: OfflineDownloadManager? = null
-
-        fun getInstance(context: Context): OfflineDownloadManager {
-            return instance ?: synchronized(this) {
-                instance ?: OfflineDownloadManager(context.applicationContext).also { instance = it }
-            }
+        @Volatile private var instance: OfflineDownloadManager? = null
+        fun getInstance(context: Context): OfflineDownloadManager = instance ?: synchronized(this) {
+            instance ?: OfflineDownloadManager(context.applicationContext).also { instance = it }
         }
     }
 
-    private val scope = CoroutineScope(Dispatchers.IO + Job())
-    private val activeDownloadJobs = ConcurrentHashMap<String, Job>()
-
+    private val scope = CoroutineScope(Dispatchers.IO + SupervisorJob())
+    private val jobs = mutableMapOf<String, Job>()
+    private val requests = mutableMapOf<String, Track>()
+    private val invalidLegacyFiles = mutableMapOf<String, String>()
+    private val preferences = context.getSharedPreferences("download_preferences", Context.MODE_PRIVATE)
+    private val _wifiOnly = MutableStateFlow(preferences.getBoolean("wifi_only", false))
+    val wifiOnly = _wifiOnly.asStateFlow()
+    private val _items = MutableStateFlow<List<Track>>(emptyList())
+    val items = _items.asStateFlow()
+    private val _storageBytes = MutableStateFlow(0L)
+    val storageBytes = _storageBytes.asStateFlow()
+    private val connectivity = context.getSystemService(Context.CONNECTIVITY_SERVICE) as ConnectivityManager
+    private val networkCallback = object : ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: Network) { enforceWifiPolicy() }
+        override fun onLost(network: Network) { enforceWifiPolicy() }
+        override fun onCapabilitiesChanged(network: Network, capabilities: NetworkCapabilities) { enforceWifiPolicy() }
+    }
     private val _downloadStates = MutableStateFlow<Map<String, DownloadState>>(emptyMap())
     val downloadStates: StateFlow<Map<String, DownloadState>> = _downloadStates.asStateFlow()
-
     private val _downloadedTracks = MutableStateFlow<List<Track>>(emptyList())
     val downloadedTracks: StateFlow<List<Track>> = _downloadedTracks.asStateFlow()
-
     private val downloadDir: File by lazy {
-        val dir = context.getExternalFilesDir(Environment.DIRECTORY_MUSIC) ?: File(context.filesDir, "downloads")
-        if (!dir.exists()) dir.mkdirs()
-        dir
+        (context.getExternalFilesDir(Environment.DIRECTORY_MUSIC) ?: File(context.filesDir, "downloads"))
+            .also { it.mkdirs() }
     }
+    private val index by lazy { AtomicFile(File(context.filesDir, "downloaded_tracks_index.json")) }
 
     init {
         loadPersistedDownloads()
+        runCatching {
+            val saved = JSONArray(preferences.getString("requests", "[]"))
+            for (i in 0 until saved.length()) {
+                val track = TrackJson.decode(saved.getJSONObject(i))
+                if (!isDownloaded(track.id)) {
+                    requests[track.id] = track
+                    _downloadStates.update { it + (track.id to DownloadState.Paused(saved.getJSONObject(i).optBoolean("waitingForWifi"))) }
+                }
+            }
+        }
+        _downloadedTracks.value.forEach { requests[it.id] = it }
+        refreshItems()
+        if (wifiAvailable == null) runCatching { connectivity.registerDefaultNetworkCallback(networkCallback) }
+        enforceWifiPolicy()
     }
 
-    fun isDownloaded(trackId: String): Boolean {
-        return _downloadStates.value[trackId] is DownloadState.Downloaded
+    private fun hasWifi() = wifiAvailable?.invoke() ?: (connectivity.getNetworkCapabilities(connectivity.activeNetwork)
+        ?.hasTransport(NetworkCapabilities.TRANSPORT_WIFI) == true)
+
+    @Synchronized
+    private fun checkWifiPolicy(track: Track) {
+        if (_wifiOnly.value && (track.audioUrl.startsWith("http") || com.example.auramusic.data.TrackMapping.needsResolution(track)) && !hasWifi()) {
+            _downloadStates.update { it + (track.id to DownloadState.Paused(true)) }
+            throw CancellationException("Waiting for Wi-Fi")
+        }
     }
 
-    fun getLocalPath(trackId: String): String? {
-        val state = _downloadStates.value[trackId]
-        return if (state is DownloadState.Downloaded) state.localPath else null
+    fun setWifiOnly(enabled: Boolean) {
+        _wifiOnly.value = enabled
+        preferences.edit().putBoolean("wifi_only", enabled).apply()
+        enforceWifiPolicy()
     }
 
+    @Synchronized
+    private fun enforceWifiPolicy() {
+        requests.values.toList().forEach { track ->
+            val state = _downloadStates.value[track.id]
+            val remote = (track.audioUrl.startsWith("http") || com.example.auramusic.data.TrackMapping.needsResolution(track))
+            if (remote && _wifiOnly.value && !hasWifi() && state is DownloadState.Downloading) {
+                _downloadStates.update { it + (track.id to DownloadState.Paused(true)) }
+                jobs[track.id]?.cancel()
+            } else if (state is DownloadState.Paused && state.waitingForWifi && (!_wifiOnly.value || hasWifi())) {
+                resumeDownload(track.id)
+            }
+        }
+    }
+
+    @Synchronized
+    fun pauseDownload(trackId: String) {
+        if (isDownloaded(trackId)) return
+        _downloadStates.update { it + (trackId to DownloadState.Paused()) }
+        jobs[trackId]?.cancel()
+        refreshItems()
+    }
+
+    fun resumeDownload(trackId: String) {
+        scope.launch {
+            val previous = synchronized(this@OfflineDownloadManager) { jobs[trackId] }
+            previous?.join()
+            val track = synchronized(this@OfflineDownloadManager) { requests[trackId] } ?: return@launch
+            downloadTrack(track)
+        }
+    }
+
+    @Synchronized
+    private fun refreshItems() {
+        _items.value = requests.values.toList()
+        _storageBytes.value = downloadDir.listFiles()?.filter { it.isFile && (it.name.endsWith(".part") || it.name.startsWith("offline_")) }?.sumOf { it.length() } ?: 0L
+        preferences.edit().putString("requests", JSONArray().apply { requests.values.filterNot { isDownloaded(it.id) }.forEach { track ->
+            put(TrackJson.encode(track).put("waitingForWifi", (_downloadStates.value[track.id] as? DownloadState.Paused)?.waitingForWifi == true))
+        } }.toString()).apply()
+    }
+
+    @Synchronized
+    fun updateTrackMetadata(track: Track) {
+        if (requests.containsKey(track.id)) requests[track.id] = track
+        _downloadedTracks.update { list -> list.map { if (it.id == track.id) it.copy(title = track.title, artist = track.artist, album = track.album, coverArtUrl = track.coverArtUrl) else it } }
+        persistDownloads(); refreshItems()
+    }
+
+    @Synchronized
+    fun deleteDownloads(ids: Set<String>) { ids.forEach { deleteDownload(it) } }
+
+    fun isDownloaded(trackId: String) = _downloadStates.value[trackId] is DownloadState.Downloaded
+    fun getLocalPath(trackId: String) = (_downloadStates.value[trackId] as? DownloadState.Downloaded)?.localPath
+
+    private fun target(track: Track): File {
+        val hash = MessageDigest.getInstance("SHA-256").digest(track.id.toByteArray())
+            .joinToString("") { "%02x".format(it) }
+        val path = track.localFilePath ?: Uri.parse(track.audioUrl).path.orEmpty()
+        val ext = if (com.example.auramusic.data.TrackMapping.isLegacyId(track.id)) "m4a" else path.substringAfterLast('.', "mp3").lowercase()
+            .takeIf { it in setOf("flac", "wav", "mp3", "m4a", "mp4", "ogg", "opus", "aac") } ?: "mp3"
+        return File(downloadDir, "offline_$hash.$ext")
+    }
+
+    @Synchronized
     fun downloadTrack(track: Track) {
-        if (track.audioUrl.isBlank()) return
-        if (isDownloaded(track.id)) return
-        if (activeDownloadJobs.containsKey(track.id)) return
-
-        val job = scope.launch {
-            _downloadStates.update { it + (track.id to DownloadState.Downloading(0f)) }
-
-            val sanitizedId = track.id.replace(Regex("[^a-zA-Z0-9_-]"), "_")
-
-            // 1. If content:// URI (from device storage)
-            if (track.audioUrl.startsWith("content://") || track.audioUrl.startsWith("file://")) {
-                try {
-                    val ext = when {
-                        track.audioUrl.contains(".flac", ignoreCase = true) || track.localFilePath?.endsWith(".flac", ignoreCase = true) == true -> ".flac"
-                        track.audioUrl.contains(".opus", ignoreCase = true) || track.localFilePath?.endsWith(".opus", ignoreCase = true) == true -> ".opus"
-                        track.audioUrl.contains(".ogg", ignoreCase = true) || track.localFilePath?.endsWith(".ogg", ignoreCase = true) == true -> ".ogg"
-                        track.audioUrl.contains(".m4a", ignoreCase = true) || track.localFilePath?.endsWith(".m4a", ignoreCase = true) == true -> ".m4a"
-                        track.audioUrl.contains(".mp4", ignoreCase = true) || track.localFilePath?.endsWith(".mp4", ignoreCase = true) == true -> ".mp4"
-                        else -> ".mp3"
-                    }
-                    val targetFile = File(downloadDir, "offline_${sanitizedId}$ext")
-                    val uri = android.net.Uri.parse(track.audioUrl)
-                    val input = if (track.audioUrl.startsWith("content://")) {
-                        context.contentResolver.openInputStream(uri)
-                    } else {
-                        java.io.FileInputStream(File(uri.path ?: track.audioUrl))
-                    }
-
-                    input?.use { inStream ->
-                        FileOutputStream(targetFile).use { outStream ->
-                            inStream.copyTo(outStream)
-                        }
-                    }
-
-                    if (!targetFile.exists() || targetFile.length() <= 0L) {
-                        throw Exception("Cached file is empty")
-                    }
-
-                    val completedTrack = track.copy(
-                        isCachedOffline = true,
-                        localFilePath = targetFile.absolutePath,
-                        audioUrl = android.net.Uri.fromFile(targetFile).toString(),
-                        qualityBadge = "OFFLINE"
-                    )
-
-                    _downloadStates.update { it + (track.id to DownloadState.Downloaded(targetFile.absolutePath)) }
-                    _downloadedTracks.update { current ->
-                        val existing = current.filterNot { it.id == track.id }
-                        existing + completedTrack
-                    }
-
-                    persistDownloads()
-                    Log.i(TAG, "Successfully cached local track: ${track.title} to ${targetFile.absolutePath}")
-                } catch (e: Exception) {
-                    Log.e(TAG, "Local caching failed for ${track.title}", e)
-                    _downloadStates.update { it + (track.id to DownloadState.Failed(e.message ?: "Caching failed")) }
-                } finally {
-                    activeDownloadJobs.remove(track.id)
-                }
-                return@launch
-            }
-
-            // 2. Online HTTP/HTTPS stream download with redirect follow
+        if ((track.audioUrl.isBlank() && !com.example.auramusic.data.TrackMapping.needsResolution(track)) || isDownloaded(track.id) || jobs.containsKey(track.id)) return
+        requests[track.id] = track
+        if (_wifiOnly.value && (track.audioUrl.startsWith("http") || com.example.auramusic.data.TrackMapping.needsResolution(track)) && !hasWifi()) {
+            _downloadStates.update { it + (track.id to DownloadState.Paused(true)) }
+            refreshItems()
+            return
+        }
+        val job = scope.launch(start = CoroutineStart.LAZY) {
+            var track = track
+            val needsRepair = com.example.auramusic.data.TrackMapping.needsResolution(track)
+            val finalFile = target(track)
+            val partial = File(finalFile.path + ".part")
+            val validator = File(finalFile.path + ".etag")
             var connection: HttpURLConnection? = null
-            var inputStream: InputStream? = null
-            var outputStream: FileOutputStream? = null
-
             try {
-                val ext = when {
-                    track.audioUrl.contains(".mp4", ignoreCase = true) || track.audioUrl.contains(".m4a", ignoreCase = true) -> ".m4a"
-                    track.audioUrl.contains(".flac", ignoreCase = true) -> ".flac"
-                    track.audioUrl.contains(".ogg", ignoreCase = true) -> ".ogg"
-                    track.audioUrl.contains(".opus", ignoreCase = true) -> ".opus"
-                    track.audioUrl.contains(".wav", ignoreCase = true) -> ".wav"
-                    else -> ".mp3"
+                ensureActive()
+                _downloadStates.update { it + (track.id to DownloadState.Downloading(0f)) }
+                if (needsRepair) {
+                    checkWifiPolicy(track)
+                    track = catalogResolver.resolve(track) ?: error("No matching recording found. Search for the song and artist.")
+                    ensureActive()
+                    synchronized(this@OfflineDownloadManager) { ensureActive(); requests[track.id] = track }
+                    partial.delete()
+                    validator.delete()
                 }
-                val targetFile = File(downloadDir, "offline_${sanitizedId}$ext")
-
-                var currentUrl = track.audioUrl
-                var redirects = 0
-                var conn: HttpURLConnection? = null
-
-                while (redirects < 5) {
-                    val url = URL(currentUrl)
-                    conn = (url.openConnection() as HttpURLConnection).apply {
+                checkWifiPolicy(track)
+                val uri = Uri.parse(track.audioUrl)
+                if (uri.scheme in listOf("content", "file")) {
+                    val input = if (uri.scheme == "content") context.contentResolver.openInputStream(uri)
+                        else FileInputStream(File(requireNotNull(uri.path)))
+                    requireNotNull(input) { "Cannot read this audio file" }.use { source ->
+                        FileOutputStream(partial).use { output ->
+                            DownloadTransfer.copy(source, output, -1, { ensureActive() })
+                        }
+                    }
+                } else {
+                    require(uri.scheme in listOf("http", "https")) { "Unsupported download address" }
+                    // Resume only when the server supplied a stable ETag. Otherwise restart safely.
+                    val etag = validator.takeIf { it.exists() }?.readText().orEmpty()
+                    val offset = if (etag.isNotBlank() && !etag.startsWith("W/")) partial.length() else 0L
+                    connection = (URL(track.audioUrl).openConnection() as HttpURLConnection).apply {
                         connectTimeout = 15000
-                        readTimeout = 30000
+                        readTimeout = 15000
                         instanceFollowRedirects = true
-                        setRequestProperty("User-Agent", "AuraMusic/2.4.0 (Android; Material 3 Expressive)")
+                        setRequestProperty("Accept-Encoding", "identity")
+                        setRequestProperty("User-Agent", "AuraMusic/1.0")
+                        if (offset > 0) {
+                            setRequestProperty("Range", "bytes=$offset-")
+                            setRequestProperty("If-Range", etag)
+                        }
                     }
-
+                    val conn = requireNotNull(connection)
                     val code = conn.responseCode
-                    if (code in 301..308) {
-                        val location = conn.getHeaderField("Location")
-                        conn.disconnect()
-                        if (!location.isNullOrBlank()) {
-                            currentUrl = if (location.startsWith("http")) location else URL(url, location).toString()
-                            redirects++
-                            continue
-                        }
-                    }
-                    break
-                }
-
-                connection = conn ?: throw Exception("Failed to open connection")
-                if (connection.responseCode != HttpURLConnection.HTTP_OK) {
-                    throw Exception("HTTP ${connection.responseCode} while downloading track")
-                }
-
-                val totalBytes = connection.contentLength.toLong()
-                inputStream = connection.inputStream
-                outputStream = FileOutputStream(targetFile)
-
-                val buffer = ByteArray(8192)
-                var bytesRead: Int
-                var downloadedBytes = 0L
-                var lastReportedProgress = 0f
-
-                while (inputStream.read(buffer).also { bytesRead = it } != -1) {
-                    outputStream.write(buffer, 0, bytesRead)
-                    downloadedBytes += bytesRead
-
-                    if (totalBytes > 0) {
-                        val progress = (downloadedBytes.toFloat() / totalBytes.toFloat()).coerceIn(0f, 1f)
-                        if (progress - lastReportedProgress >= 0.05f || progress >= 1f) {
-                            lastReportedProgress = progress
-                            _downloadStates.update { it + (track.id to DownloadState.Downloading(progress)) }
+                    val resume = code == HttpURLConnection.HTTP_PARTIAL && offset > 0 &&
+                        conn.getHeaderField("Content-Range").orEmpty().startsWith("bytes $offset-")
+                    require(code == HttpURLConnection.HTTP_OK || resume) { "HTTP $code; tap to retry" }
+                    val newTag = conn.getHeaderField("ETag").orEmpty()
+                    if (newTag.isNotBlank()) validator.writeText(newTag) else validator.delete()
+                    val base = if (resume) offset else 0L
+                    val expected = conn.contentLengthLong
+                    val total = if (expected >= 0) base + expected else -1L
+                    var lastProgress = -1f
+                    conn.inputStream.use { source ->
+                        FileOutputStream(partial, resume).use { output ->
+                            DownloadTransfer.copy(source, output, expected, { ensureActive(); checkWifiPolicy(track) }) { bytes ->
+                                val progress = if (total > 0) ((base + bytes).toFloat() / total).coerceIn(0f, 1f) else 0f
+                                if (progress - lastProgress >= 0.02f) {
+                                    lastProgress = progress
+                                    synchronized(this@OfflineDownloadManager) {
+                                        ensureActive()
+                                        if (_downloadStates.value[track.id] !is DownloadState.Paused) _downloadStates.update { it + (track.id to DownloadState.Downloading(progress)) }
+                                        refreshItems()
+                                    }
+                                }
+                            }
+                            output.fd.sync()
                         }
                     }
                 }
-
-                outputStream.flush()
-
-                if (!targetFile.exists() || targetFile.length() <= 0L) {
-                    throw Exception("Downloaded file is empty")
+                ensureActive()
+                require(partial.length() > 0) { "Downloaded file is empty" }
+                // Serialize publication with deletion: a cancelled job cannot resurrect a removed song.
+                synchronized(this@OfflineDownloadManager) {
+                    ensureActive()
+                    check(partial.renameTo(finalFile)) { "Cannot finish download" }
+                    invalidLegacyFiles.remove(track.id)?.takeIf { it != finalFile.path }?.let { File(it).delete() }
+                    validator.delete()
+                    val completed = track.copy(isCachedOffline = true, localFilePath = finalFile.path,
+                        qualityBadge = "OFFLINE")
+                    _downloadedTracks.update { tracks -> tracks.filterNot { it.id == track.id } + completed }
+                    persistDownloads()
+                    _downloadStates.update { it + (track.id to DownloadState.Downloaded(finalFile.path)) }
+                    requests[track.id] = completed
+                    refreshItems()
                 }
-
-                val completedTrack = track.copy(
-                    isCachedOffline = true,
-                    localFilePath = targetFile.absolutePath,
-                    audioUrl = if (track.audioUrl.isNotBlank()) track.audioUrl else android.net.Uri.fromFile(targetFile).toString(),
-                    qualityBadge = "320K OFFLINE"
-                )
-
-                _downloadStates.update { it + (track.id to DownloadState.Downloaded(targetFile.absolutePath)) }
-                _downloadedTracks.update { current ->
-                    val existing = current.filterNot { it.id == track.id }
-                    existing + completedTrack
+            } catch (cancelled: CancellationException) {
+                val keepPartial = synchronized(this@OfflineDownloadManager) { _downloadStates.value[track.id] is DownloadState.Paused }
+                if (!keepPartial) { partial.delete(); validator.delete() }
+                throw cancelled
+            } catch (error: Exception) {
+                // Keep resumable network data, but discard incomplete local copies.
+                if (track.audioUrl.startsWith("content:") || track.audioUrl.startsWith("file:")) partial.delete()
+                synchronized(this@OfflineDownloadManager) {
+                    if (isActive) _downloadStates.update { it + (track.id to DownloadState.Failed(error.message ?: "Download failed")) }
                 }
-
-                persistDownloads()
-                Log.i(TAG, "Successfully downloaded: ${track.title} to ${targetFile.absolutePath}")
-            } catch (e: Exception) {
-                Log.e(TAG, "Download failed for ${track.title}", e)
-                _downloadStates.update { it + (track.id to DownloadState.Failed(e.message ?: "Download failed")) }
             } finally {
-                try { inputStream?.close() } catch (ignored: Exception) {}
-                try { outputStream?.close() } catch (ignored: Exception) {}
                 connection?.disconnect()
-                activeDownloadJobs.remove(track.id)
+                synchronized(this@OfflineDownloadManager) {
+                    jobs.remove(track.id)
+                    if (!requests.containsKey(track.id)) { partial.delete(); validator.delete() }
+                    refreshItems()
+                }
             }
         }
-
-        activeDownloadJobs[track.id] = job
+        jobs[track.id] = job
+        job.invokeOnCompletion {
+            synchronized(this) { if (jobs[track.id] === job) jobs.remove(track.id) }
+        }
+        job.start()
+        refreshItems()
     }
 
+    @Synchronized
     fun deleteDownload(trackId: String) {
-        activeDownloadJobs[trackId]?.cancel()
-        activeDownloadJobs.remove(trackId)
-
+        // Keep the cancelled job registered until its streams close, preventing overlapping retries.
+        jobs[trackId]?.cancel()
+        val request = requests.remove(trackId)
         val track = _downloadedTracks.value.firstOrNull { it.id == trackId }
-        val filePath = track?.localFilePath ?: getLocalPath(trackId)
-
-        if (filePath != null) {
-            val file = File(filePath)
-            if (file.exists()) {
-                file.delete()
-            }
+        val path = track?.localFilePath ?: getLocalPath(trackId)
+        if (path != null) File(path).delete()
+        invalidLegacyFiles.remove(trackId)?.let { File(it).delete() }
+        if (request != null && jobs[trackId] == null) {
+            File(target(request).path + ".part").delete()
+            File(target(request).path + ".etag").delete()
         }
-
         _downloadStates.update { it - trackId }
-        _downloadedTracks.update { current -> current.filterNot { it.id == trackId } }
-        scope.launch { persistDownloads() }
+        _downloadedTracks.update { tracks -> tracks.filterNot { it.id == trackId } }
+        persistDownloads()
+        refreshItems()
     }
 
+    @Synchronized
     private fun loadPersistedDownloads() {
-        val indexFile = File(context.filesDir, INDEX_FILE_NAME)
-        if (!indexFile.exists()) return
-
         try {
-            val content = indexFile.readText()
-            val jsonArray = JSONArray(content)
-            val list = mutableListOf<Track>()
-            val stateMap = mutableMapOf<String, DownloadState>()
-
-            for (i in 0 until jsonArray.length()) {
-                val obj = jsonArray.getJSONObject(i)
-                val id = obj.optString("id")
-                val localPath = obj.optString("localPath")
-
-                val file = File(localPath)
-                if (id.isNotBlank() && localPath.isNotBlank() && file.exists() && file.length() > 0L) {
-                    val persistedAudioUrl = obj.optString("audioUrl", "")
-                    val finalAudioUrl = if (persistedAudioUrl.isNotBlank()) persistedAudioUrl else android.net.Uri.fromFile(file).toString()
-                    val track = Track(
-                        id = id,
-                        title = obj.optString("title", "Unknown"),
-                        artist = obj.optString("artist", "Unknown"),
-                        album = obj.optString("album", "Downloaded Album"),
-                        durationMs = obj.optLong("durationMs", 180000L),
-                        audioUrl = finalAudioUrl,
-                        coverArtUrl = obj.optString("coverArtUrl", ""),
-                        source = StreamingSource.LOCAL_STORAGE,
-                        qualityBadge = "320K OFFLINE",
-                        isLossless = true,
-                        isCachedOffline = true,
-                        isLocal = true,
-                        localFilePath = localPath,
-                        category = "Downloaded"
-                    )
-                    list.add(track)
-                    stateMap[id] = DownloadState.Downloaded(localPath)
+            val text = index.openRead().bufferedReader().use { it.readText() }
+            val array = JSONArray(text)
+            val invalid = mutableMapOf<String, DownloadState>()
+            val tracks = (0 until array.length()).mapNotNull { i ->
+                val obj = array.getJSONObject(i)
+                val path = obj.optString("localFilePath", "").ifBlank { obj.optString("localPath", "") }
+                val decoded = TrackJson.decode(obj)
+                val file = File(path)
+                if (com.example.auramusic.data.TrackMapping.needsResolution(decoded)) {
+                    requests[decoded.id] = decoded
+                    if (file.isFile) invalidLegacyFiles[decoded.id] = path
+                    invalid[decoded.id] = DownloadState.Failed("Old song mapping was incorrect. Download again to get the matching recording.")
+                    null
+                } else if (path.isBlank() || !file.isFile || file.length() == 0L) null else {
+                    decoded.copy(localFilePath = path, isCachedOffline = true, qualityBadge = "OFFLINE")
                 }
             }
-
-            _downloadedTracks.value = list
-            _downloadStates.value = stateMap
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to load offline index", e)
+            _downloadedTracks.value = tracks
+            _downloadStates.value = tracks.associate { it.id to DownloadState.Downloaded(requireNotNull(it.localFilePath)) } + invalid
+        } catch (_: java.io.FileNotFoundException) {
+            // First run.
+        } catch (error: Exception) {
+            Log.e("OfflineDownloadManager", "Cannot read download index", error)
         }
     }
 
-    private suspend fun persistDownloads() = withContext(Dispatchers.IO) {
+    @Synchronized
+    private fun persistDownloads() {
+        var stream: FileOutputStream? = null
         try {
-            val indexFile = File(context.filesDir, INDEX_FILE_NAME)
-            val jsonArray = JSONArray()
-
-            for (track in _downloadedTracks.value) {
-                val obj = JSONObject().apply {
-                    put("id", track.id)
-                    put("title", track.title)
-                    put("artist", track.artist)
-                    put("album", track.album)
-                    put("durationMs", track.durationMs)
-                    put("audioUrl", if (track.audioUrl.isNotBlank()) track.audioUrl else (track.localFilePath ?: ""))
-                    put("coverArtUrl", track.coverArtUrl)
-                    put("localPath", track.localFilePath ?: "")
-                }
-                jsonArray.put(obj)
-            }
-
-            indexFile.writeText(jsonArray.toString(2))
-        } catch (e: Exception) {
-            Log.e(TAG, "Failed to persist offline index", e)
+            val array = JSONArray().apply { _downloadedTracks.value.forEach { put(TrackJson.encode(it)) } }
+            stream = index.startWrite()
+            stream.write(array.toString().toByteArray(Charsets.UTF_8))
+            index.finishWrite(stream)
+        } catch (error: Exception) {
+            index.failWrite(stream)
+            Log.e("OfflineDownloadManager", "Cannot save download index", error)
         }
     }
 }
